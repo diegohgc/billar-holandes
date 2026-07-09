@@ -1,0 +1,1663 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Sjoelen - Prototipo 3D</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  :root { --ad-h: 50px; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    background: #0f0a05; overflow: hidden;
+    touch-action: none; overscroll-behavior: none;
+    font-family: 'Segoe UI', Arial, sans-serif; user-select: none;
+  }
+  #adBanner {
+    position: fixed; left: 0; right: 0; bottom: 0; height: var(--ad-h);
+    z-index: 40; display: flex; align-items: center; justify-content: center;
+    background: #1a1006; border-top: 1px solid #3a2410;
+    color: #f3e2c055; font-size: 11px; letter-spacing: 1px;
+  }
+  #ui {
+    position: fixed; top: 0; left: 0; right: 0;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 10px 14px; color: #f3e2c0; z-index: 10;
+    background: linear-gradient(180deg, rgba(0,0,0,.55), rgba(0,0,0,0));
+    pointer-events: none;
+  }
+  #ui .box { font-size: 14px; line-height: 1.4; }
+  #reserve { display: flex; flex-wrap: wrap; gap: 3px; max-width: 132px; margin-top: 5px; }
+  #reserve .pip {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 32%, #f0dca0, #b87a28);
+    box-shadow: inset 0 0 0 1px #5a3a12; transition: opacity .15s, transform .15s;
+  }
+  #reserve .pip.used { opacity: 0.16; transform: scale(0.7); background: #4a3a22; box-shadow: none; }
+  #ui .big { font-size: 20px; font-weight: 700; }
+  #scoreboardBtn, #soundBtn {
+    pointer-events: auto; margin-top: 4px; padding: 5px 12px; border-radius: 14px;
+    border: 1px solid #c98a2e88; background: rgba(201,138,46,0.18); color: #f3e2c0;
+    font-size: 12px; font-weight: 600;
+  }
+  #soundBtn { padding: 5px 9px; margin-right: 4px; }
+  #timer {
+    position: fixed; top: 62px; left: 50%; transform: translateX(-50%);
+    width: 46px; height: 46px; border-radius: 50%; z-index: 10; display: none;
+    background: rgba(20,12,5,0.7); border: 2px solid #6fcf6f; color: #cdeecd;
+    font-size: 22px; font-weight: 700; line-height: 42px; text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,.4); pointer-events: none;
+  }
+  #timer.warn { border-color: #e0b23c; color: #f3e2c0; }
+  #timer.danger { border-color: #e05a3c; color: #ffd7cc; }
+  #setFlash {
+    position: fixed; top: 34%; left: 50%; transform: translate(-50%, -50%) scale(0.5);
+    z-index: 30; text-align: center; pointer-events: none; opacity: 0;
+    color: #ffe9a8; font-size: 54px; font-weight: 800; letter-spacing: 2px;
+    text-shadow: 0 0 18px rgba(255,190,80,.9), 0 3px 8px rgba(0,0,0,.6);
+  }
+  #setFlash span { display: block; font-size: 30px; color: #fff; }
+  #setFlash.show { animation: setpop 1.5s ease-out forwards; }
+  @keyframes setpop {
+    0% { opacity: 0; transform: translate(-50%,-50%) scale(0.4); }
+    18% { opacity: 1; transform: translate(-50%,-50%) scale(1.15); }
+    30% { transform: translate(-50%,-50%) scale(1); }
+    75% { opacity: 1; transform: translate(-50%,-55%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%,-72%) scale(1); }
+  }
+  .scorePopup {
+    position: fixed; z-index: 25; pointer-events: none; transform: translate(-50%, -50%);
+    color: #ffe9a8; font-size: 26px; font-weight: 800;
+    text-shadow: 0 0 10px rgba(255,190,80,.8), 0 2px 5px rgba(0,0,0,.7);
+    animation: scorefloat 1.1s ease-out forwards;
+  }
+  @keyframes scorefloat {
+    0% { opacity: 0; transform: translate(-50%, -30%) scale(0.6); }
+    20% { opacity: 1; transform: translate(-50%, -60%) scale(1.1); }
+    100% { opacity: 0; transform: translate(-50%, -160%) scale(1); }
+  }
+  #resetBtn {
+    position: fixed; bottom: calc(18px + var(--ad-h)); left: 50%; transform: translateX(-50%);
+    padding: 12px 26px; border-radius: 30px; border: none; pointer-events: none;
+    background: #c98a2ecc; color: #2a1a05; font-weight: 700; font-size: 16px;
+    box-shadow: 0 4px 10px rgba(0,0,0,.4); z-index: 10; display: none;
+  }
+  #hint {
+    position: fixed; bottom: calc(20px + var(--ad-h)); left: 50%; transform: translateX(-50%);
+    color: #f3e2c0aa; font-size: 13px; z-index: 10; text-align: center; width: 90%;
+  }
+  canvas { display: block; touch-action: none; }
+
+  .overlay {
+    position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
+    background: rgba(10,6,3,0.82); padding: 24px;
+  }
+  .panel {
+    background: #201305; border: 1px solid #4a2c0f; border-radius: 16px;
+    padding: 22px 20px; width: 100%; max-width: 380px; color: #f3e2c0;
+    box-shadow: 0 10px 30px rgba(0,0,0,.5); max-height: 88vh; overflow-y: auto;
+  }
+  .panel h1 { font-size: 22px; margin: 0 0 4px; text-align: center; }
+  .panel h2 { font-size: 19px; margin: 0 0 10px; text-align: center; }
+  .panel p { color: #f3e2c0cc; font-size: 14px; text-align: center; }
+  .panel label { display: block; font-size: 13px; color: #f3e2c0aa; margin: 14px 0 6px; }
+  .playerCountRow { display: flex; align-items: center; justify-content: center; gap: 18px; }
+  .playerCountRow button {
+    width: 38px; height: 38px; border-radius: 50%; border: none; background: #c98a2e;
+    color: #2a1a05; font-size: 18px; font-weight: 700;
+  }
+  .playerCountRow span { font-size: 20px; font-weight: 700; min-width: 24px; text-align: center; }
+  #nameInputs input {
+    width: 100%; padding: 10px 12px; margin-bottom: 8px; border-radius: 8px;
+    border: 1px solid #4a2c0f; background: #150c04; color: #f3e2c0; font-size: 14px;
+  }
+  .bigBtn {
+    width: 100%; margin-top: 14px; padding: 13px; border-radius: 12px; border: none;
+    background: #c98a2e; color: #2a1a05; font-weight: 700; font-size: 15px;
+  }
+  .bigBtn:disabled { background: #6b5636; color: #a8926c; }
+  #onlineSoon { margin-top: 6px; font-size: 12px; }
+  .ghostBtn {
+    width: 100%; margin-top: 10px; padding: 11px; border-radius: 12px;
+    border: 1px solid #c98a2e; background: transparent; color: #f3e2c0; font-weight: 600; font-size: 14px;
+  }
+  .resultRow, .scoreRow {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 4px; border-bottom: 1px solid #3a2410; font-size: 14px;
+  }
+  .resultRow .rank { color: #c98a2e; font-weight: 700; width: 22px; }
+  .resultRow .name { flex: 1; margin-left: 6px; }
+  .resultRow .pts { font-weight: 700; font-size: 17px; }
+  .scoreRow .name { flex: 1; }
+  .scoreRow .detail { font-size: 12px; color: #f3e2c0aa; margin-right: 8px; }
+  .activeTag { color: #88ff88; font-size: 11px; margin-left: 6px; }
+</style>
+</head>
+<body>
+
+<div id="ui">
+  <div class="box">
+    <span id="curPlayerName" class="big">-</span><br>
+    <span data-i18n="round">Tanda</span> <span id="roundNum">1</span>/3 · <span data-i18n="discs">Fichas</span>: <span id="shotsLeft">20</span>
+    <div id="reserve"></div>
+  </div>
+  <div class="box" style="text-align:right">
+    <span data-i18n="points">Puntos</span>: <span id="curScore" class="big">0</span><br>
+    <button id="soundBtn">🔊</button>
+    <button id="scoreboardBtn" data-i18n="scoreboard">Marcador</button>
+  </div>
+</div>
+
+<canvas id="c"></canvas>
+<div id="adBanner">AD BANNER</div>
+<div id="timer">8</div>
+<div id="setFlash"><span data-i18n="setLabel">¡SET!</span><span>+20</span></div>
+<button id="resetBtn" data-i18n="nextDisc">Siguiente ficha</button>
+<div id="hint" data-i18n="hint">Arrastra la ficha hacia atrás y suelta para lanzar</div>
+
+<div id="mainMenu" class="overlay">
+  <div class="panel">
+    <h1 data-i18n="gameTitle">Billar Holandés</h1>
+    <button id="menuLocalBtn" class="bigBtn" data-i18n="playLocal">Jugar Local</button>
+    <button id="menuOnlineBtn" class="bigBtn" disabled data-i18n="playOnline">Jugar Online</button>
+    <p id="onlineSoon" data-i18n="comingSoon">Próximamente</p>
+  </div>
+</div>
+
+<div id="setup" class="overlay" style="display:none">
+  <div class="panel">
+    <h1 data-i18n="gameTitle">Billar Holandés</h1>
+    <p data-i18n="setupSubtitle">Configura la partida antes de empezar</p>
+    <label data-i18n="numPlayers">Número de jugadores</label>
+    <div class="playerCountRow">
+      <button id="pcMinus">−</button>
+      <span id="pcVal">2</span>
+      <button id="pcPlus">+</button>
+    </div>
+    <label data-i18n="names">Nombres</label>
+    <div id="nameInputs"></div>
+    <button id="startGameBtn" class="bigBtn" data-i18n="startGame">Empezar partida</button>
+  </div>
+</div>
+
+<div id="passScreen" class="overlay" style="display:none">
+  <div class="panel">
+    <h2 id="passTitle"></h2>
+    <p id="passSub"></p>
+    <button id="passReadyBtn" class="bigBtn" data-i18n="ready">Listo, ¡a jugar!</button>
+  </div>
+</div>
+
+<div id="resultsScreen" class="overlay" style="display:none">
+  <div class="panel">
+    <h2 data-i18n="finalResults">Resultados finales</h2>
+    <div id="resultsList"></div>
+    <div id="soloHistoryBox" style="display:none">
+      <p id="soloRecordMsg" style="margin:14px 0 4px;"></p>
+      <div id="soloHistoryList"></div>
+    </div>
+    <button id="newGameBtn" class="bigBtn" data-i18n="newGame">Nueva partida</button>
+  </div>
+</div>
+
+<div id="scoreboardPanel" class="overlay" style="display:none">
+  <div class="panel">
+    <h2 data-i18n="scoreboard">Marcador</h2>
+    <div id="scoreboardList"></div>
+    <button id="closeScoreboardBtn" class="ghostBtn" data-i18n="close">Cerrar</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+<script>
+(function () {
+  const canvas = document.getElementById('c');
+  const resetBtn = document.getElementById('resetBtn');
+  const hintEl = document.getElementById('hint');
+  const timerEl = document.getElementById('timer');
+  const setFlashEl = document.getElementById('setFlash');
+  const reserveEl = document.getElementById('reserve');
+  const curPlayerNameEl = document.getElementById('curPlayerName');
+  const roundNumEl = document.getElementById('roundNum');
+  const shotsLeftEl = document.getElementById('shotsLeft');
+  const curScoreEl = document.getElementById('curScore');
+
+  const mainMenuEl = document.getElementById('mainMenu');
+  const setupEl = document.getElementById('setup');
+  const pcValEl = document.getElementById('pcVal');
+  const nameInputsEl = document.getElementById('nameInputs');
+  const passScreenEl = document.getElementById('passScreen');
+  const passTitleEl = document.getElementById('passTitle');
+  const passSubEl = document.getElementById('passSub');
+  const resultsScreenEl = document.getElementById('resultsScreen');
+  const resultsListEl = document.getElementById('resultsList');
+  const scoreboardPanelEl = document.getElementById('scoreboardPanel');
+  const scoreboardListEl = document.getElementById('scoreboardList');
+
+  // ================= i18n: textos según el idioma del sistema (fallback inglés) =================
+  // Frases redactadas SIN plurales ni posesivos ("Fichas a lanzar: {n}", "Turno: {name}")
+  // para que sean gramaticalmente correctas en cualquier idioma sin reglas especiales.
+  const STR = {
+    en: { gameTitle: 'Dutch Shuffleboard', playLocal: 'Play Local', playOnline: 'Play Online', comingSoon: 'Coming soon', setupSubtitle: 'Set up the match to begin', numPlayers: 'Number of players', names: 'Names', startGame: 'Start game', round: 'Round', discs: 'Discs', points: 'Points', scoreboard: 'Scoreboard', ready: "Ready, let's play!", finalResults: 'Final results', newGame: 'New game', close: 'Close', hint: 'Drag the disc back and release to throw', nextDisc: 'Next disc', setLabel: 'SET!', player: 'Player {n}', out: 'Out', ptsGained: '+{n} pts', playing: 'playing', turnOf: 'Turn: {name}', passSub: 'Round {round}/3 · Discs to throw: {n}', sets: 'Sets: {n}', ptsShort: '{n} pts', rank: '{n}.', newRecord: '🏆 New personal best!', bestScore: 'Your best score: {n} pts' },
+    es: { gameTitle: 'Billar Holandés', playLocal: 'Jugar Local', playOnline: 'Jugar Online', comingSoon: 'Próximamente', setupSubtitle: 'Configura la partida antes de empezar', numPlayers: 'Número de jugadores', names: 'Nombres', startGame: 'Empezar partida', round: 'Tanda', discs: 'Fichas', points: 'Puntos', scoreboard: 'Marcador', ready: '¡Listo, a jugar!', finalResults: 'Resultados finales', newGame: 'Nueva partida', close: 'Cerrar', hint: 'Arrastra la ficha hacia atrás y suelta para lanzar', nextDisc: 'Siguiente ficha', setLabel: '¡SET!', player: 'Jugador {n}', out: 'Fuera', ptsGained: '+{n} pts', playing: 'jugando', turnOf: 'Turno: {name}', passSub: 'Tanda {round}/3 · Fichas a lanzar: {n}', sets: 'Sets: {n}', ptsShort: '{n} pts', rank: '{n}º', newRecord: '🏆 ¡Nuevo récord personal!', bestScore: 'Tu mejor puntuación: {n} pts' },
+    fr: { gameTitle: 'Billard hollandais', playLocal: 'Jouer en local', playOnline: 'Jouer en ligne', comingSoon: 'Bientôt disponible', setupSubtitle: 'Configure la partie pour commencer', numPlayers: 'Nombre de joueurs', names: 'Noms', startGame: 'Commencer la partie', round: 'Manche', discs: 'Palets', points: 'Points', scoreboard: 'Tableau des scores', ready: 'Prêt, jouons !', finalResults: 'Résultats finaux', newGame: 'Nouvelle partie', close: 'Fermer', hint: 'Tire le palet vers l’arrière et relâche pour lancer', nextDisc: 'Palet suivant', setLabel: 'SET !', player: 'Joueur {n}', out: 'Raté', ptsGained: '+{n} pts', playing: 'joue', turnOf: 'Tour : {name}', passSub: 'Manche {round}/3 · Palets à lancer : {n}', sets: 'Sets : {n}', ptsShort: '{n} pts', rank: '{n}.', newRecord: '🏆 Nouveau record personnel !', bestScore: 'Ton meilleur score : {n} pts' },
+    de: { gameTitle: 'Holländisches Billard', playLocal: 'Lokal spielen', playOnline: 'Online spielen', comingSoon: 'Demnächst verfügbar', setupSubtitle: 'Richte das Spiel ein, um zu beginnen', numPlayers: 'Anzahl der Spieler', names: 'Namen', startGame: 'Spiel starten', round: 'Runde', discs: 'Scheiben', points: 'Punkte', scoreboard: 'Punktetafel', ready: 'Bereit, los geht’s!', finalResults: 'Endergebnis', newGame: 'Neues Spiel', close: 'Schließen', hint: 'Zieh die Scheibe zurück und lass los zum Werfen', nextDisc: 'Nächste Scheibe', setLabel: 'SET!', player: 'Spieler {n}', out: 'Daneben', ptsGained: '+{n} Pkt.', playing: 'spielt', turnOf: 'Am Zug: {name}', passSub: 'Runde {round}/3 · Zu werfen: {n}', sets: 'Sets: {n}', ptsShort: '{n} Pkt.', rank: '{n}.', newRecord: '🏆 Neuer persönlicher Rekord!', bestScore: 'Deine Bestleistung: {n} Pkt.' },
+    it: { gameTitle: 'Biliardo olandese', playLocal: 'Gioca in locale', playOnline: 'Gioca online', comingSoon: 'Prossimamente', setupSubtitle: 'Configura la partita per iniziare', numPlayers: 'Numero di giocatori', names: 'Nomi', startGame: 'Inizia partita', round: 'Round', discs: 'Dischi', points: 'Punti', scoreboard: 'Classifica', ready: 'Pronto, giochiamo!', finalResults: 'Risultati finali', newGame: 'Nuova partita', close: 'Chiudi', hint: 'Trascina il disco indietro e rilascia per lanciare', nextDisc: 'Disco successivo', setLabel: 'SET!', player: 'Giocatore {n}', out: 'Fuori', ptsGained: '+{n} pt', playing: 'gioca', turnOf: 'Turno: {name}', passSub: 'Round {round}/3 · Dischi da lanciare: {n}', sets: 'Set: {n}', ptsShort: '{n} pt', rank: '{n}.', newRecord: '🏆 Nuovo record personale!', bestScore: 'Il tuo miglior punteggio: {n} pt' },
+    pt: { gameTitle: 'Bilhar holandês', playLocal: 'Jogar Local', playOnline: 'Jogar Online', comingSoon: 'Em breve', setupSubtitle: 'Configure a partida para começar', numPlayers: 'Número de jogadores', names: 'Nomes', startGame: 'Iniciar partida', round: 'Rodada', discs: 'Discos', points: 'Pontos', scoreboard: 'Placar', ready: 'Pronto, vamos jogar!', finalResults: 'Resultados finais', newGame: 'Novo jogo', close: 'Fechar', hint: 'Arraste o disco para trás e solte para lançar', nextDisc: 'Próximo disco', setLabel: 'SET!', player: 'Jogador {n}', out: 'Fora', ptsGained: '+{n} pts', playing: 'jogando', turnOf: 'Vez: {name}', passSub: 'Rodada {round}/3 · Discos para lançar: {n}', sets: 'Sets: {n}', ptsShort: '{n} pts', rank: '{n}.', newRecord: '🏆 Novo recorde pessoal!', bestScore: 'Sua melhor pontuação: {n} pts' },
+    ru: { gameTitle: 'Голландский бильярд', playLocal: 'Играть локально', playOnline: 'Играть онлайн', comingSoon: 'Скоро', setupSubtitle: 'Настройте игру, чтобы начать', numPlayers: 'Количество игроков', names: 'Имена', startGame: 'Начать игру', round: 'Раунд', discs: 'Шайбы', points: 'Очки', scoreboard: 'Таблица очков', ready: 'Готов, играем!', finalResults: 'Итоговые результаты', newGame: 'Новая игра', close: 'Закрыть', hint: 'Оттяните шайбу назад и отпустите, чтобы бросить', nextDisc: 'Следующая шайба', setLabel: 'СЕТ!', player: 'Игрок {n}', out: 'Мимо', ptsGained: '+{n} очк.', playing: 'играет', turnOf: 'Ход: {name}', passSub: 'Раунд {round}/3 · Шайб для броска: {n}', sets: 'Сеты: {n}', ptsShort: '{n} очк.', rank: '{n}.', newRecord: '🏆 Новый личный рекорд!', bestScore: 'Ваш лучший результат: {n} очк.' },
+    zh: { gameTitle: '荷兰台球', playLocal: '本地游戏', playOnline: '在线游戏', comingSoon: '敬请期待', setupSubtitle: '设置比赛以开始', numPlayers: '玩家人数', names: '名字', startGame: '开始游戏', round: '回合', discs: '圆盘', points: '分数', scoreboard: '记分板', ready: '准备好了，开始吧！', finalResults: '最终结果', newGame: '新游戏', close: '关闭', hint: '向后拖动圆盘并松开即可投掷', nextDisc: '下一个圆盘', setLabel: '成套！', player: '玩家 {n}', out: '未进', ptsGained: '+{n} 分', playing: '游戏中', turnOf: '轮到：{name}', passSub: '第 {round}/3 回合 · 待投圆盘：{n}', sets: '套数：{n}', ptsShort: '{n} 分', rank: '第{n}', newRecord: '🏆 新个人纪录！', bestScore: '你的最佳分数：{n} 分' },
+    ja: { gameTitle: 'オランダビリヤード', playLocal: 'ローカルでプレイ', playOnline: 'オンラインでプレイ', comingSoon: '近日公開', setupSubtitle: 'ゲームを設定して開始', numPlayers: 'プレイヤー数', names: '名前', startGame: 'ゲーム開始', round: 'ラウンド', discs: 'ディスク', points: '得点', scoreboard: 'スコアボード', ready: '準備完了、始めよう！', finalResults: '最終結果', newGame: '新しいゲーム', close: '閉じる', hint: 'ディスクを後ろに引いて離すと発射', nextDisc: '次のディスク', setLabel: 'セット！', player: 'プレイヤー {n}', out: '外れ', ptsGained: '+{n} 点', playing: 'プレイ中', turnOf: '手番：{name}', passSub: 'ラウンド {round}/3 · 投げるディスク：{n}', sets: 'セット：{n}', ptsShort: '{n} 点', rank: '{n}.', newRecord: '🏆 自己ベスト更新！', bestScore: '自己ベスト：{n} 点' },
+    ko: { gameTitle: '네덜란드 당구', playLocal: '로컬 플레이', playOnline: '온라인 플레이', comingSoon: '출시 예정', setupSubtitle: '게임을 설정하여 시작하세요', numPlayers: '플레이어 수', names: '이름', startGame: '게임 시작', round: '라운드', discs: '디스크', points: '점수', scoreboard: '점수판', ready: '준비 완료, 시작하자!', finalResults: '최종 결과', newGame: '새 게임', close: '닫기', hint: '디스크를 뒤로 당겼다가 놓아 던지세요', nextDisc: '다음 디스크', setLabel: '세트!', player: '플레이어 {n}', out: '실패', ptsGained: '+{n}점', playing: '플레이 중', turnOf: '차례: {name}', passSub: '{round}/3 라운드 · 던질 디스크: {n}', sets: '세트: {n}', ptsShort: '{n}점', rank: '{n}.', newRecord: '🏆 개인 최고 기록!', bestScore: '최고 점수: {n}점' },
+    ar: { gameTitle: 'البلياردو الهولندي', playLocal: 'اللعب محليًا', playOnline: 'اللعب عبر الإنترنت', comingSoon: 'قريبًا', setupSubtitle: 'قم بإعداد المباراة للبدء', numPlayers: 'عدد اللاعبين', names: 'الأسماء', startGame: 'ابدأ اللعبة', round: 'الجولة', discs: 'الأقراص', points: 'النقاط', scoreboard: 'لوحة النتائج', ready: 'جاهز، لنلعب!', finalResults: 'النتائج النهائية', newGame: 'لعبة جديدة', close: 'إغلاق', hint: 'اسحب القرص للخلف وأفلته للرمي', nextDisc: 'القرص التالي', setLabel: 'طقم!', player: 'اللاعب {n}', out: 'خارج', ptsGained: '+{n} نقطة', playing: 'يلعب', turnOf: 'الدور: {name}', passSub: 'الجولة {round}/3 · أقراص للرمي: {n}', sets: 'الأطقم: {n}', ptsShort: '{n} نقطة', rank: '{n}.', newRecord: '🏆 رقم قياسي شخصي جديد!', bestScore: 'أفضل نتيجة لك: {n} نقطة' },
+    hi: { gameTitle: 'डच बिलियर्ड्स', playLocal: 'स्थानीय खेलें', playOnline: 'ऑनलाइन खेलें', comingSoon: 'जल्द आ रहा है', setupSubtitle: 'शुरू करने के लिए मैच सेट करें', numPlayers: 'खिलाड़ियों की संख्या', names: 'नाम', startGame: 'खेल शुरू करें', round: 'राउंड', discs: 'डिस्क', points: 'अंक', scoreboard: 'स्कोरबोर्ड', ready: 'तैयार, खेलते हैं!', finalResults: 'अंतिम परिणाम', newGame: 'नया खेल', close: 'बंद करें', hint: 'डिस्क को पीछे खींचें और फेंकने के लिए छोड़ें', nextDisc: 'अगली डिस्क', setLabel: 'सेट!', player: 'खिलाड़ी {n}', out: 'बाहर', ptsGained: '+{n} अंक', playing: 'खेल रहा है', turnOf: 'बारी: {name}', passSub: 'राउंड {round}/3 · फेंकने के लिए डिस्क: {n}', sets: 'सेट: {n}', ptsShort: '{n} अंक', rank: '{n}.', newRecord: '🏆 नया व्यक्तिगत रिकॉर्ड!', bestScore: 'आपका सर्वश्रेष्ठ स्कोर: {n} अंक' },
+    tr: { gameTitle: 'Hollanda bilardosu', playLocal: 'Yerel oyna', playOnline: 'Çevrimiçi oyna', comingSoon: 'Yakında', setupSubtitle: 'Başlamak için maçı ayarla', numPlayers: 'Oyuncu sayısı', names: 'İsimler', startGame: 'Oyunu başlat', round: 'Tur', discs: 'Diskler', points: 'Puan', scoreboard: 'Puan tablosu', ready: 'Hazır, oynayalım!', finalResults: 'Nihai sonuçlar', newGame: 'Yeni oyun', close: 'Kapat', hint: 'Diski geriye çekip bırakarak fırlat', nextDisc: 'Sonraki disk', setLabel: 'SET!', player: 'Oyuncu {n}', out: 'Dışarı', ptsGained: '+{n} puan', playing: 'oynuyor', turnOf: 'Sıra: {name}', passSub: 'Tur {round}/3 · Atılacak disk: {n}', sets: 'Set: {n}', ptsShort: '{n} puan', rank: '{n}.', newRecord: '🏆 Yeni kişisel rekor!', bestScore: 'En iyi skorun: {n} puan' },
+    id: { gameTitle: 'Biliar Belanda', playLocal: 'Main Lokal', playOnline: 'Main Online', comingSoon: 'Segera hadir', setupSubtitle: 'Atur pertandingan untuk memulai', numPlayers: 'Jumlah pemain', names: 'Nama', startGame: 'Mulai permainan', round: 'Ronde', discs: 'Keping', points: 'Poin', scoreboard: 'Papan skor', ready: 'Siap, ayo main!', finalResults: 'Hasil akhir', newGame: 'Permainan baru', close: 'Tutup', hint: 'Tarik keping ke belakang dan lepaskan untuk melempar', nextDisc: 'Keping berikutnya', setLabel: 'SET!', player: 'Pemain {n}', out: 'Gagal', ptsGained: '+{n} poin', playing: 'sedang bermain', turnOf: 'Giliran: {name}', passSub: 'Ronde {round}/3 · Keping untuk dilempar: {n}', sets: 'Set: {n}', ptsShort: '{n} poin', rank: '{n}.', newRecord: '🏆 Rekor pribadi baru!', bestScore: 'Skor terbaikmu: {n} poin' },
+    vi: { gameTitle: 'Bi-a Hà Lan', playLocal: 'Chơi Cục bộ', playOnline: 'Chơi Trực tuyến', comingSoon: 'Sắp ra mắt', setupSubtitle: 'Thiết lập trận đấu để bắt đầu', numPlayers: 'Số người chơi', names: 'Tên', startGame: 'Bắt đầu trò chơi', round: 'Vòng', discs: 'Đĩa', points: 'Điểm', scoreboard: 'Bảng điểm', ready: 'Sẵn sàng, chơi thôi!', finalResults: 'Kết quả cuối cùng', newGame: 'Trò chơi mới', close: 'Đóng', hint: 'Kéo đĩa ra sau và thả để ném', nextDisc: 'Đĩa tiếp theo', setLabel: 'SET!', player: 'Người chơi {n}', out: 'Trượt', ptsGained: '+{n} điểm', playing: 'đang chơi', turnOf: 'Lượt: {name}', passSub: 'Vòng {round}/3 · Đĩa cần ném: {n}', sets: 'Set: {n}', ptsShort: '{n} điểm', rank: '{n}.', newRecord: '🏆 Kỷ lục cá nhân mới!', bestScore: 'Điểm cao nhất của bạn: {n} điểm' },
+    ca: { gameTitle: 'Billar holandès', playLocal: 'Jugar en local', playOnline: 'Jugar en línia', comingSoon: 'Properament', setupSubtitle: 'Configura la partida per començar', numPlayers: 'Nombre de jugadors', names: 'Noms', startGame: 'Comença la partida', round: 'Tanda', discs: 'Fitxes', points: 'Punts', scoreboard: 'Marcador', ready: 'A punt, a jugar!', finalResults: 'Resultats finals', newGame: 'Nova partida', close: 'Tanca', hint: 'Arrossega la fitxa cap enrere i deixa anar per llançar', nextDisc: 'Fitxa següent', setLabel: 'SET!', player: 'Jugador {n}', out: 'Fora', ptsGained: '+{n} pts', playing: 'jugant', turnOf: 'Torn: {name}', passSub: 'Tanda {round}/3 · Fitxes a llançar: {n}', sets: 'Sets: {n}', ptsShort: '{n} pts', rank: '{n}è', newRecord: '🏆 Nou rècord personal!', bestScore: 'La teva millor puntuació: {n} pts' },
+    eu: { gameTitle: 'Billar holandarra', playLocal: 'Jokatu lokalean', playOnline: 'Jokatu online', comingSoon: 'Laster', setupSubtitle: 'Konfiguratu partida hasteko', numPlayers: 'Jokalari kopurua', names: 'Izenak', startGame: 'Hasi partida', round: 'Txanda', discs: 'Fitxak', points: 'Puntuak', scoreboard: 'Markagailua', ready: 'Prest, jokatzera!', finalResults: 'Azken emaitzak', newGame: 'Partida berria', close: 'Itxi', hint: 'Arrastatu fitxa atzera eta askatu jaurtitzeko', nextDisc: 'Hurrengo fitxa', setLabel: 'SET!', player: '{n}. jokalaria', out: 'Kanpoan', ptsGained: '+{n} puntu', playing: 'jokatzen', turnOf: 'Txanda: {name}', passSub: '{round}/3 txanda · Jaurtitzeko fitxak: {n}', sets: 'Setak: {n}', ptsShort: '{n} puntu', rank: '{n}.', newRecord: '🏆 Marka pertsonal berria!', bestScore: 'Zure emaitzarik onena: {n} puntu' },
+    gl: { gameTitle: 'Billar holandés', playLocal: 'Xogar en local', playOnline: 'Xogar en liña', comingSoon: 'Proximamente', setupSubtitle: 'Configura a partida para comezar', numPlayers: 'Número de xogadores', names: 'Nomes', startGame: 'Comezar partida', round: 'Rolda', discs: 'Fichas', points: 'Puntos', scoreboard: 'Marcador', ready: 'Listo, a xogar!', finalResults: 'Resultados finais', newGame: 'Nova partida', close: 'Pechar', hint: 'Arrastra a ficha cara atrás e solta para lanzar', nextDisc: 'Seguinte ficha', setLabel: 'SET!', player: 'Xogador {n}', out: 'Fóra', ptsGained: '+{n} ptos', playing: 'xogando', turnOf: 'Quenda: {name}', passSub: 'Rolda {round}/3 · Fichas a lanzar: {n}', sets: 'Sets: {n}', ptsShort: '{n} ptos', rank: '{n}º', newRecord: '🏆 Novo récord persoal!', bestScore: 'A túa mellor puntuación: {n} ptos' },
+  };
+  // system language decides; ?lang=xx in the URL can force one (handy for testing)
+  const _forcedLang = new URLSearchParams(location.search).get('lang');
+  const _sysLang = (navigator.language || navigator.userLanguage || 'en').toLowerCase();
+  const _prefix = _sysLang.split('-')[0];
+  const LANG = (_forcedLang && STR[_forcedLang]) ? _forcedLang : (STR[_prefix] ? _prefix : 'en');
+  if (LANG === 'ar') document.documentElement.setAttribute('dir', 'rtl'); // right-to-left layout
+  function t(key, vars) {
+    let s = (STR[LANG] && STR[LANG][key] != null) ? STR[LANG][key] : (STR.en[key] != null ? STR.en[key] : key);
+    if (vars) for (const k in vars) s = s.replace(new RegExp('\\{' + k + '\\}', 'g'), vars[k]);
+    return s;
+  }
+  function applyStaticI18n() {
+    document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
+    document.title = t('gameTitle');
+  }
+  applyStaticI18n();
+
+  // ================= SOUND (procedural, no external files - stays offline-friendly) =================
+  const Sound = (function () {
+    let ctx = null, enabled = true;
+    function ensure() {
+      if (!ctx) {
+        try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { ctx = null; }
+      }
+      if (ctx && ctx.state === 'suspended') ctx.resume();
+      return ctx;
+    }
+    // a short wooden "thock": a damped low body tone plus a filtered noise click,
+    // both scaled by the impact strength (0..1)
+    function knock(strength, freq) {
+      const c = ctx; if (!c || !enabled) return;
+      const v = Math.max(0, Math.min(1, strength));
+      if (v < 0.02) return;
+      const now = c.currentTime;
+      const osc = c.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.6, now + 0.06);
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(v * 0.5, now + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.13);
+      osc.connect(g).connect(c.destination);
+      osc.start(now); osc.stop(now + 0.15);
+
+      const nb = c.createBufferSource();
+      const buf = c.createBuffer(1, Math.floor(c.sampleRate * 0.03), c.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2);
+      nb.buffer = buf;
+      const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = freq * 2.2; bp.Q.value = 1.1;
+      const ng = c.createGain(); ng.gain.value = v * 0.35;
+      nb.connect(bp).connect(ng).connect(c.destination);
+      nb.start(now);
+    }
+    // pleasant two-note "plop" when a disc drops into a pocket
+    function score() {
+      const c = ctx; if (!c || !enabled) return;
+      const now = c.currentTime;
+      [[0, 880], [0.08, 1320]].forEach(([t, f]) => {
+        const osc = c.createOscillator(); osc.type = 'sine'; osc.frequency.value = f;
+        const g = c.createGain();
+        g.gain.setValueAtTime(0.0001, now + t);
+        g.gain.exponentialRampToValueAtTime(0.22, now + t + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.2);
+        osc.connect(g).connect(c.destination);
+        osc.start(now + t); osc.stop(now + t + 0.22);
+      });
+    }
+    // soft wooden slide + push when the disc is launched (power 0..1)
+    function launch(power) {
+      const c = ctx; if (!c || !enabled) return;
+      const now = c.currentTime;
+      const nb = c.createBufferSource();
+      const buf = c.createBuffer(1, Math.floor(c.sampleRate * 0.16), c.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) { const e = i / d.length; d[i] = (Math.random() * 2 - 1) * Math.sin(Math.PI * e) * 0.5; }
+      nb.buffer = buf;
+      const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 360 + power * 220; bp.Q.value = 0.8;
+      const g = c.createGain(); g.gain.value = 0.16;
+      nb.connect(bp).connect(g).connect(c.destination);
+      nb.start(now);
+      knock(0.45 + power * 0.4, 150);
+    }
+    // triumphant little arpeggio when a full set is completed
+    function setDone() {
+      const c = ctx; if (!c || !enabled) return;
+      const now = c.currentTime;
+      [880, 1108, 1318, 1760].forEach((f, i) => {
+        const t = i * 0.075;
+        const osc = c.createOscillator(); osc.type = 'triangle'; osc.frequency.value = f;
+        const g = c.createGain();
+        g.gain.setValueAtTime(0.0001, now + t);
+        g.gain.exponentialRampToValueAtTime(0.24, now + t + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.3);
+        osc.connect(g).connect(c.destination);
+        osc.start(now + t); osc.stop(now + t + 0.32);
+      });
+    }
+    // continuous wooden slide rumble while a disc is moving - a looping brown-noise bed whose
+    // volume and brightness follow the fastest disc's speed (0..1)
+    let slideNode = null, slideGain = null, slideFilter = null;
+    function ensureSlide() {
+      if (!ctx || slideNode) return;
+      const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 2), ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      let last = 0;
+      for (let i = 0; i < d.length; i++) { const w = Math.random() * 2 - 1; last = (last + 0.02 * w) / 1.02; d[i] = last * 3.2; }
+      slideNode = ctx.createBufferSource(); slideNode.buffer = buf; slideNode.loop = true;
+      slideFilter = ctx.createBiquadFilter(); slideFilter.type = 'bandpass'; slideFilter.frequency.value = 260; slideFilter.Q.value = 0.7;
+      slideGain = ctx.createGain(); slideGain.gain.value = 0;
+      slideNode.connect(slideFilter).connect(slideGain).connect(ctx.destination);
+      slideNode.start();
+    }
+    function setSlide(intensity) {
+      if (!ctx) return;
+      if (!enabled) { if (slideGain) slideGain.gain.value = 0; return; }
+      ensureSlide();
+      if (!slideGain) return;
+      const v = Math.max(0, Math.min(1, intensity));
+      slideGain.gain.setTargetAtTime(v * 0.10, ctx.currentTime, 0.05);
+      slideFilter.frequency.setTargetAtTime(230 + v * 260, ctx.currentTime, 0.05);
+    }
+    return {
+      ensure, knock, score, launch, setDone, setSlide,
+      toggle() { enabled = !enabled; if (enabled) ensure(); else if (slideGain) slideGain.gain.value = 0; return enabled; },
+      isOn() { return enabled; },
+    };
+  })();
+
+  // light haptic feedback on phones (independent of the sound toggle; no-op where unsupported)
+  const Haptics = {
+    buzz(ms) { if (navigator.vibrate) { try { navigator.vibrate(ms); } catch (e) {} } },
+  };
+
+  // ================= GAME / PHYSICS (board-space units) =================
+  // board-space: bx = left/right (0 = center), by = distance up the lane (0 = start line)
+
+  const BOARD = {
+    length: 200,
+    widthBottom: 36,
+    widthTop: 30,
+    gateDepth: 16,       // how far the gate slots extend along the lane (length, not visual depth)
+    lipSpeed: 80,
+    postWidth: 1.2,
+  };
+  const SLOT_VALUES = [2, 3, 4, 1];
+  const startY = 14;
+
+  const TRAY_LENGTH = 55;
+  const TRAY = { widthBottom: BOARD.widthBottom + 4 };
+  const GATE_BACK_Y = BOARD.length + BOARD.gateDepth;
+  const TOTAL_LENGTH = TRAY_LENGTH + GATE_BACK_Y;
+
+  const PUCK_R = 2.5; // disc must fit through the gate opening with only a little clearance,
+  const PUCK_H = 2.0; // like a real sjoelen puck - see slot width computed from GATE_SIDE_FRAME below
+  const FRICTION = 50;      // wood-on-wood grip: discs slow down noticeably, not ice-like
+  const GATE_FRICTION = 85; // even more drag once inside a pocket, so discs settle quickly
+  const RESTITUTION_WALL = 0.55;
+  const RESTITUTION_POST = 0.35;
+  const STOP_SPEED = 2.2;
+
+  // visual-only vertical depths for the 3D scene
+  const GATE_PIT_DEPTH = 9;   // how far down the pockets sit below the board surface
+  const TRAY_PIT_DEPTH = 4;   // how far down the return tray sits
+
+  function boardHalfWidthAt(y) {
+    const t = Math.max(0, Math.min(1, y / BOARD.length));
+    return (BOARD.widthBottom + (BOARD.widthTop - BOARD.widthBottom) * t) / 2;
+  }
+
+  // a solid wooden frame runs down each outer side of the gate housing. Without it the
+  // corner pockets reach all the way to the lane wall, so any disc sliding along the edge
+  // was funnelled straight into the corner goal - making slots 2 and 1 far too easy. The
+  // frame seals that gap so the four openings are the same difficulty.
+  const GATE_SIDE_FRAME = 2.0;
+
+  function slotBoundsX() {
+    const openW = BOARD.widthTop - 2 * GATE_SIDE_FRAME; // usable opening, inset from both walls
+    const halfW = openW / 2;
+    const totalPostWidth = BOARD.postWidth * 3;
+    const slotWidth = (openW - totalPostWidth) / 4;
+    const bounds = [];
+    let x = -halfW;
+    for (let i = 0; i < 4; i++) {
+      bounds.push([x, x + slotWidth]);
+      x = x + slotWidth + BOARD.postWidth;
+    }
+    return bounds;
+  }
+  const slots = slotBoundsX();
+  const postXs = [];
+  for (let i = 0; i < 3; i++) postXs.push(slots[i][1] + BOARD.postWidth / 2);
+
+  // every solid barrier a disc can hit inside the gate: the 3 inner dividing posts plus the
+  // 2 outer side frames. Each is {x: center, halfW: half-thickness}.
+  const gateTopHalf = BOARD.widthTop / 2;
+  const gateBarriers = postXs.map(px => ({ x: px, halfW: BOARD.postWidth / 2 }));
+  gateBarriers.push({ x: (-gateTopHalf + slots[0][0]) / 2, halfW: (slots[0][0] + gateTopHalf) / 2 });
+  gateBarriers.push({ x: (gateTopHalf + slots[3][1]) / 2, halfW: (gateTopHalf - slots[3][1]) / 2 });
+
+  // ---- multi-puck board: every thrown disc stays exactly where it stops and becomes ----
+  // ---- a real obstacle that later throws can collide with and push around.          ----
+  let nextPuckId = 1;
+  let puck = null; // the disc currently being aimed / actively thrown by the player
+  let boardPucks = []; // every disc belonging to the active player's board this turn
+
+  function makePuckState(x, y) {
+    return { id: nextPuckId++, x, y, vx: 0, vy: 0, r: PUCK_R, state: 'ready', scored: false, mesh: null };
+  }
+
+  function anyFlying() {
+    return boardPucks.some(p => p.state === 'flying');
+  }
+
+  function circleRectCollide(cx, cy, r, rx, ry, rw, rh) {
+    const closestX = Math.max(rx, Math.min(cx, rx + rw));
+    const closestY = Math.max(ry, Math.min(cy, ry + rh));
+    const dx = cx - closestX, dy = cy - closestY;
+    const distSq = dx * dx + dy * dy;
+    if (distSq < r * r) {
+      const dist = Math.sqrt(distSq) || 0.0001;
+      return { dx, dy, dist, penetration: r - dist };
+    }
+    return null;
+  }
+
+  function resolvePostCollisions(p) {
+    let hit = false;
+    for (const b of gateBarriers) {
+      const rx = b.x - b.halfW, ry = BOARD.length - 1;
+      const rw = b.halfW * 2, rh = BOARD.gateDepth + 2;
+      const col = circleRectCollide(p.x, p.y, p.r, rx, ry, rw, rh);
+      if (col) {
+        const nx = col.dx / col.dist, ny = col.dy / col.dist;
+        p.x += nx * col.penetration;
+        p.y += ny * col.penetration;
+        const vn = p.vx * nx + p.vy * ny;
+        if (vn < 0) {
+          if (-vn > 18) Sound.knock(Math.min(1, -vn / 150), 220); // knock against a post/frame
+          p.vx -= (1 + RESTITUTION_POST) * vn * nx;
+          p.vy -= (1 + RESTITUTION_POST) * vn * ny;
+        }
+        hit = true;
+      }
+    }
+    return hit;
+  }
+
+  // circle-circle collisions between every pair of discs currently on the board:
+  // a moving disc can knock a resting one loose (equal-mass elastic bump), and
+  // scored discs act as immovable obstacles it simply bounces off.
+  const PUCK_RESTITUTION = 0.45;
+  function resolvePuckCollisions() {
+    for (let i = 0; i < boardPucks.length; i++) {
+      const a = boardPucks[i];
+      if (a.state !== 'flying') continue;
+      for (let j = 0; j < boardPucks.length; j++) {
+        if (i === j) continue;
+        const b = boardPucks[j];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const dist = Math.hypot(dx, dy) || 0.0001;
+        const minDist = a.r + b.r;
+        if (dist >= minDist) continue;
+        const nx = dx / dist, ny = dy / dist;
+        const penetration = minDist - dist;
+
+        if (b.scored) {
+          // immovable: push A fully out and reflect its velocity like a wall
+          a.x -= nx * penetration;
+          a.y -= ny * penetration;
+          const vn = a.vx * nx + a.vy * ny;
+          if (vn > 0) {
+            if (vn > 18) Sound.knock(Math.min(1, vn / 140), 300);
+            a.vx -= (1 + RESTITUTION_POST) * vn * nx;
+            a.vy -= (1 + RESTITUTION_POST) * vn * ny;
+          }
+        } else {
+          // movable: split the separation and exchange momentum along the normal
+          a.x -= nx * penetration * 0.5;
+          a.y -= ny * penetration * 0.5;
+          b.x += nx * penetration * 0.5;
+          b.y += ny * penetration * 0.5;
+          const rvx = a.vx - b.vx, rvy = a.vy - b.vy;
+          const vn = rvx * nx + rvy * ny;
+          if (vn > 0) {
+            if (vn > 18) Sound.knock(Math.min(1, vn / 160), 260); // disc-on-disc clack
+            const impulse = (1 + PUCK_RESTITUTION) * vn / 2;
+            a.vx -= impulse * nx;
+            a.vy -= impulse * ny;
+            b.vx += impulse * nx;
+            b.vy += impulse * ny;
+            if (b.state === 'resting') b.state = 'flying';
+          }
+        }
+      }
+    }
+  }
+
+  function stepPuck(p, dt) {
+    if (p.state !== 'flying') return;
+
+    const speed = Math.hypot(p.vx, p.vy);
+    if (speed <= 0) { settlePuck(p); return; }
+
+    const inGate = p.y > BOARD.length;
+    const fr = inGate ? GATE_FRICTION : FRICTION;
+    const newSpeed = Math.max(0, speed - fr * dt);
+    const ratio = speed > 0 ? newSpeed / speed : 0;
+    p.vx *= ratio;
+    p.vy *= ratio;
+
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+
+    if (!inGate) {
+      const halfW = boardHalfWidthAt(p.y);
+      if (p.x - p.r < -halfW) {
+        if (-p.vx > 20) Sound.knock(Math.min(1, -p.vx / 170), 190); // bounce off the side rail
+        p.x = -halfW + p.r;
+        p.vx = Math.abs(p.vx) * RESTITUTION_WALL;
+      } else if (p.x + p.r > halfW) {
+        if (p.vx > 20) Sound.knock(Math.min(1, p.vx / 170), 190);
+        p.x = halfW - p.r;
+        p.vx = -Math.abs(p.vx) * RESTITUTION_WALL;
+      }
+
+      // the gate face acts like a wall with four narrow openings: a disc only passes if it
+      // is both well aligned with an opening AND carries enough speed; otherwise it is
+      // rejected straight back down the lane (this is the real source of difficulty)
+      if (p.y + p.r >= BOARD.length && p.y <= BOARD.length) {
+        const curSpeed = Math.hypot(p.vx, p.vy);
+        const margin = p.r * 0.62; // disc centre must clear this much of the opening edges
+        let aligned = false;
+        for (const s of slots) {
+          if (p.x >= s[0] + margin && p.x <= s[1] - margin) { aligned = true; break; }
+        }
+        if (p.vy > 0 && (!aligned || curSpeed < BOARD.lipSpeed)) {
+          if (p.vy > 20) Sound.knock(Math.min(1, p.vy / 160), 210); // rejected by the gate face
+          p.y = BOARD.length - p.r;
+          p.vy = -Math.abs(p.vy) * 0.45;
+          p.vx *= 0.7;
+        } else {
+          resolvePostCollisions(p);
+        }
+      }
+    } else {
+      if (p.y + p.r > BOARD.length + BOARD.gateDepth) {
+        p.y = BOARD.length + BOARD.gateDepth - p.r;
+        p.vy = 0;
+      }
+      const topHalf = BOARD.widthTop / 2;
+      if (p.x - p.r < -topHalf) {
+        p.x = -topHalf + p.r;
+        p.vx = Math.abs(p.vx) * RESTITUTION_WALL;
+      } else if (p.x + p.r > topHalf) {
+        p.x = topHalf - p.r;
+        p.vx = -Math.abs(p.vx) * RESTITUTION_WALL;
+      }
+      resolvePostCollisions(p);
+    }
+
+    const MAX_SPEED = 260;
+    const speedAfter = Math.hypot(p.vx, p.vy);
+    if (speedAfter > MAX_SPEED) {
+      const k = MAX_SPEED / speedAfter;
+      p.vx *= k; p.vy *= k;
+    }
+
+    const finalSpeed = Math.hypot(p.vx, p.vy);
+    if (finalSpeed < STOP_SPEED) {
+      p.vx = 0; p.vy = 0;
+      settlePuck(p);
+    }
+  }
+
+  function stepAllPucks(dt) {
+    for (const p of boardPucks) stepPuck(p, dt);
+    resolvePuckCollisions();
+  }
+
+  function settlePuck(p) {
+    p.vx = 0; p.vy = 0;
+    p.state = 'resting';
+    // must be fully through the mouth (whole body past the gate line), not just straddling it
+    if (!p.scored && p.y > BOARD.length + PUCK_R) {
+      for (let i = 0; i < slots.length; i++) {
+        if (p.x >= slots[i][0] && p.x <= slots[i][1]) {
+          p.scored = true;
+          onDiscScored(i);
+          break;
+        }
+      }
+    }
+  }
+
+  // ================= GAME RULES: 30 discs, 3 sub-tandas, sets scoring, hotseat rotation =================
+  const DISCS_PER_PLAYER = 20;
+  const MAX_ROUNDS = 3;
+
+  let players = [];
+  let curRound = 1;
+  let curPlayerIdx = 0;
+  let shotsLeft = 0;
+  let gamePhase = 'setup'; // 'setup' | 'playing' | 'finished'
+
+  function computeScore(slotCounts) {
+    const sets = Math.min(...slotCounts);
+    let score = sets * 20;
+    slotCounts.forEach((cnt, i) => { score += (cnt - sets) * SLOT_VALUES[i]; });
+    return { score, sets };
+  }
+
+  function refreshHud() {
+    if (gamePhase !== 'playing') return;
+    const p = players[curPlayerIdx];
+    curPlayerNameEl.textContent = p.name;
+    roundNumEl.textContent = curRound;
+    shotsLeftEl.textContent = shotsLeft;
+    curScoreEl.textContent = computeScore(p.slotCounts).score;
+    updateTrayDiscs();
+  }
+
+  function renderScoreboardList(targetEl, showActive) {
+    targetEl.innerHTML = '';
+    players.forEach((p, i) => {
+      const { score } = computeScore(p.slotCounts);
+      const row = document.createElement('div');
+      row.className = 'scoreRow';
+      row.innerHTML = `<span class="name">${p.name}${showActive && i === curPlayerIdx && gamePhase === 'playing' ? '<span class="activeTag">● ' + t('playing') + '</span>' : ''}</span>` +
+        `<span class="detail">[${p.slotCounts.join(', ')}]</span><span>${t('ptsShort', { n: score })}</span>`;
+      targetEl.appendChild(row);
+    });
+  }
+
+  document.getElementById('scoreboardBtn').addEventListener('click', () => {
+    renderScoreboardList(scoreboardListEl, true);
+    scoreboardPanelEl.style.display = 'flex';
+  });
+  document.getElementById('soundBtn').addEventListener('click', (e) => {
+    const on = Sound.toggle();
+    e.currentTarget.textContent = on ? '🔊' : '🔇';
+  });
+  document.getElementById('closeScoreboardBtn').addEventListener('click', () => {
+    scoreboardPanelEl.style.display = 'none';
+  });
+
+  // ---- setup screen ----
+  let playerCount = 2;
+  function renderNameInputs() {
+    const existing = Array.from(nameInputsEl.querySelectorAll('input')).map(i => i.value);
+    nameInputsEl.innerHTML = '';
+    for (let i = 0; i < playerCount; i++) {
+      const input = document.createElement('input');
+      input.placeholder = t('player', { n: i + 1 });
+      input.value = existing[i] || '';
+      input.maxLength = 18;
+      nameInputsEl.appendChild(input);
+    }
+  }
+  renderNameInputs();
+  document.getElementById('menuLocalBtn').addEventListener('click', () => {
+    mainMenuEl.style.display = 'none';
+    setupEl.style.display = 'flex';
+  });
+  document.getElementById('pcMinus').addEventListener('click', () => {
+    playerCount = Math.max(1, playerCount - 1);
+    pcValEl.textContent = playerCount;
+    renderNameInputs();
+  });
+  document.getElementById('pcPlus').addEventListener('click', () => {
+    playerCount = Math.min(6, playerCount + 1);
+    pcValEl.textContent = playerCount;
+    renderNameInputs();
+  });
+
+  document.getElementById('startGameBtn').addEventListener('click', () => {
+    Sound.ensure(); // browsers only allow audio to start from a user gesture
+    const inputs = Array.from(nameInputsEl.querySelectorAll('input'));
+    players = inputs.map((inp, i) => ({
+      name: (inp.value.trim() || t('player', { n: i + 1 })),
+      slotCounts: [0, 0, 0, 0],
+      remaining: DISCS_PER_PLAYER,
+    }));
+    curRound = 1;
+    curPlayerIdx = 0;
+    setupEl.style.display = 'none';
+    gamePhase = 'playing';
+    startPlayerTurn();
+  });
+
+  // ---- board disc <-> scene mesh bookkeeping (only the active player's discs are ever visible) ----
+  function detachBoardMeshes() {
+    for (const p of boardPucks) if (p.mesh) scene.remove(p.mesh);
+  }
+  function separateFromExisting(p) {
+    for (let iter = 0; iter < 6; iter++) {
+      let moved = false;
+      for (const other of boardPucks) {
+        if (other === p) continue;
+        const dx = p.x - other.x, dy = p.y - other.y;
+        const dist = Math.hypot(dx, dy) || 0.0001;
+        const minDist = p.r + other.r;
+        if (dist < minDist) {
+          const nx = dx / dist, ny = dy / dist;
+          p.x += nx * (minDist - dist);
+          p.y += ny * (minDist - dist);
+          moved = true;
+        }
+      }
+      if (!moved) break;
+    }
+  }
+
+  function spawnReadyPuck() {
+    const p = makePuckState(0, startY);
+    p.mesh = makePuckMesh();
+    scene.add(p.mesh);
+    separateFromExisting(p);
+    boardPucks.push(p);
+    puck = p;
+    aimStarted = false; // new disc: back to the full 8s ready countdown
+    shotTimerPhase = null;
+    resetBtn.style.display = 'none';
+    hintEl.style.display = 'block';
+  }
+
+  function startPlayerTurn() {
+    // the pockets are cleared at the start of every sub-tanda so leftover discs from the
+    // previous one never block the path of the fresh throws about to come down the lane
+    detachBoardMeshes();
+    boardPucks = [];
+    const p = players[curPlayerIdx];
+    shotsLeft = curRound === 1 ? DISCS_PER_PLAYER : p.remaining;
+    roundEnding = false;
+    spawnReadyPuck();
+    rebuildScoreStack();
+    refreshHud();
+  }
+
+  function onDiscScored(slotIndex) {
+    const p = players[curPlayerIdx];
+    p.slotCounts[slotIndex]++;
+    shotScored += SLOT_VALUES[slotIndex]; // count everything sunk this shot, launcher or knocked-in
+    showScorePopup(slotIndex, SLOT_VALUES[slotIndex]);
+
+    // did this disc complete a brand-new full set (one in every goal)?
+    const sets = Math.min(...p.slotCounts);
+    if (sets > (p.celebratedSets || 0)) {
+      p.celebratedSets = sets;
+      Sound.setDone();
+      Haptics.buzz([25, 40, 25]);
+      flashSet();
+    } else {
+      Sound.score();
+      Haptics.buzz(20);
+    }
+    refreshHud();
+  }
+
+  // a scored disc is immediately lifted off the lane and stacked behind its goal, exactly like
+  // real sjoelen players clear the gate after every disc - this keeps the doorway permanently
+  // open so later throws in the same sub-tanda never bounce off discs that already scored
+  function pruneScoredPucks() {
+    let changed = false;
+    for (let i = boardPucks.length - 1; i >= 0; i--) {
+      const p = boardPucks[i];
+      if (p.scored) {
+        if (p.mesh) scene.remove(p.mesh);
+        boardPucks.splice(i, 1);
+        changed = true;
+      }
+    }
+    if (changed) rebuildScoreStack();
+  }
+
+  // called every frame once the board is fully still: spawns the next disc automatically,
+  // or - once the sub-tanda's discs are all thrown - collects the failed ones and rotates the turn
+  let roundEnding = false;
+  let shotScored = 0;            // points sunk during the current shot (launcher + any knocked in)
+  let shotFeedbackPending = false;
+  function maybeAdvanceFlow() {
+    if (gamePhase !== 'playing' || roundEnding) return;
+    if (anyFlying()) return;
+    if (!puck || puck.state !== 'resting') return;
+    // board fully still: report what the WHOLE shot achieved (a disc you knocked into a goal
+    // counts even if your own launcher stayed out)
+    if (shotFeedbackPending) {
+      resetBtn.textContent = shotScored > 0 ? t('ptsGained', { n: shotScored }) : t('out');
+      resetBtn.style.display = 'block';
+      shotFeedbackPending = false;
+    }
+    // wait for the camera to finish easing back to the throwing view before arming the next
+    // disc - otherwise the next puck becomes tappable while the camera is still mid zoom-out,
+    // and a tap based on what's on screen lands on the wrong board position
+    if (camPhase !== 'rest') return;
+    if (shotsLeft > 0) {
+      spawnReadyPuck();
+    } else {
+      roundEnding = true;
+      finishRound();
+    }
+  }
+
+  function finishRound() {
+    const failedCount = boardPucks.filter(p => !p.scored).length;
+    detachBoardMeshes();
+    boardPucks = [];
+    players[curPlayerIdx].remaining = failedCount;
+    resetBtn.style.display = 'none';
+    hintEl.style.display = 'none';
+    advanceTurn();
+  }
+
+  function advanceTurn() {
+    let attempts = 0;
+    let nextIdx = curPlayerIdx;
+    let nextRound = curRound;
+    while (attempts <= players.length) {
+      nextIdx++;
+      if (nextIdx >= players.length) {
+        nextIdx = 0;
+        nextRound++;
+        if (nextRound > MAX_ROUNDS) { finishGame(); return; }
+      }
+      const shotsForNext = nextRound === 1 ? DISCS_PER_PLAYER : players[nextIdx].remaining;
+      if (shotsForNext > 0) break;
+      attempts++;
+    }
+    if (attempts > players.length) { finishGame(); return; }
+
+    curPlayerIdx = nextIdx;
+    curRound = nextRound;
+    showPassScreen();
+  }
+
+  function showPassScreen() {
+    const p = players[curPlayerIdx];
+    const shotsNow = curRound === 1 ? DISCS_PER_PLAYER : p.remaining;
+    passTitleEl.textContent = t('turnOf', { name: p.name });
+    passSubEl.textContent = t('passSub', { round: curRound, n: shotsNow });
+    passScreenEl.style.display = 'flex';
+  }
+  document.getElementById('passReadyBtn').addEventListener('click', () => {
+    passScreenEl.style.display = 'none';
+    startPlayerTurn();
+  });
+
+  // ---- solo-mode personal best, kept in localStorage so it survives between visits ----
+  const SOLO_HISTORY_KEY = 'sjoelen_solo_history';
+  function loadSoloHistory() {
+    try { return JSON.parse(localStorage.getItem(SOLO_HISTORY_KEY)) || []; }
+    catch (e) { return []; }
+  }
+  function saveSoloResult(score, sets) {
+    const history = loadSoloHistory();
+    history.push({ score, sets });
+    history.sort((a, b) => b.score - a.score);
+    const trimmed = history.slice(0, 10);
+    try { localStorage.setItem(SOLO_HISTORY_KEY, JSON.stringify(trimmed)); } catch (e) {}
+    return trimmed;
+  }
+
+  function finishGame() {
+    gamePhase = 'finished';
+    resetBtn.style.display = 'none';
+    hintEl.style.display = 'none';
+    detachBoardMeshes();
+    boardPucks = [];
+    const ranked = players.map(p => ({ name: p.name, ...computeScore(p.slotCounts) }))
+      .sort((a, b) => b.score - a.score);
+    resultsListEl.innerHTML = '';
+    ranked.forEach((r, i) => {
+      const row = document.createElement('div');
+      row.className = 'resultRow';
+      row.innerHTML = `<span class="rank">${t('rank', { n: i + 1 })}</span><span class="name">${r.name} <span style="color:#f3e2c0aa;font-size:12px;">(${t('sets', { n: r.sets })})</span></span><span class="pts">${r.score}</span>`;
+      resultsListEl.appendChild(row);
+    });
+
+    const soloBoxEl = document.getElementById('soloHistoryBox');
+    if (players.length === 1) {
+      const priorBest = loadSoloHistory()[0];
+      const thisResult = ranked[0];
+      const isNewRecord = !priorBest || thisResult.score > priorBest.score;
+      const history = saveSoloResult(thisResult.score, thisResult.sets);
+      const recordMsgEl = document.getElementById('soloRecordMsg');
+      recordMsgEl.textContent = isNewRecord
+        ? t('newRecord')
+        : t('bestScore', { n: history[0].score });
+      const listEl = document.getElementById('soloHistoryList');
+      listEl.innerHTML = '';
+      history.slice(0, 5).forEach((h, i) => {
+        const row = document.createElement('div');
+        row.className = 'scoreRow';
+        row.innerHTML = `<span class="name">${t('rank', { n: i + 1 })}</span><span class="detail">${t('sets', { n: h.sets })}</span><span>${t('ptsShort', { n: h.score })}</span>`;
+        listEl.appendChild(row);
+      });
+      soloBoxEl.style.display = 'block';
+    } else {
+      soloBoxEl.style.display = 'none';
+    }
+
+    resultsScreenEl.style.display = 'flex';
+  }
+
+  document.getElementById('newGameBtn').addEventListener('click', () => {
+    resultsScreenEl.style.display = 'none';
+    setupEl.style.display = 'flex';
+    gamePhase = 'setup';
+  });
+
+  // ================= 3D SCENE =================
+  // board-space (bx, by) -> world (x, z): x = bx, z = -by (lane runs toward -Z)
+
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0f0a05);
+  scene.fog = new THREE.Fog(0x0f0a05, 420, 620);
+
+  const camera = new THREE.PerspectiveCamera(42, 1, 1, 1000);
+
+  // resting framing (whole lane visible) vs. follow framing (closer, tracks the puck while it flies)
+  const restCamPos = new THREE.Vector3();
+  const restCamLook = new THREE.Vector3(0, 0, -110);
+  let followHeight = 130, followBehind = 55, followLookAhead = 55;
+  const curCamPos = new THREE.Vector3();
+  const curCamLook = new THREE.Vector3();
+  const followPos = new THREE.Vector3();
+  const followLook = new THREE.Vector3();
+  let camBlend = 0; // 0 = resting wide view, 1 = fully zoomed in following the puck
+
+  function layoutCamera() {
+    const size = renderer.getSize(new THREE.Vector2());
+    const aspect = size.x / size.y;
+    camera.aspect = aspect;
+    // portrait phones need a steeper, further-back camera to fit the whole lane
+    const portrait = aspect < 0.9;
+    restCamPos.set(0, portrait ? 420 : 340, portrait ? 40 : 70);
+    followHeight = portrait ? 165 : 135;
+    followBehind = portrait ? 130 : 100;
+    followLookAhead = portrait ? 70 : 55;
+    if (curCamPos.lengthSq() === 0) curCamPos.copy(restCamPos);
+    if (curCamLook.lengthSq() === 0) curCamLook.copy(restCamLook);
+    camera.updateProjectionMatrix();
+  }
+
+  const hemi = new THREE.HemisphereLight(0xfff2d9, 0x1a0f05, 0.75);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xfff0d0, 1.15);
+  sun.position.set(40, 260, 20);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.camera.left = -120;
+  sun.shadow.camera.right = 120;
+  sun.shadow.camera.top = 180;
+  sun.shadow.camera.bottom = -180;
+  sun.shadow.camera.near = 10;
+  sun.shadow.camera.far = 400;
+  sun.shadow.bias = -0.0015;
+  scene.add(sun);
+  scene.add(sun.target);
+  sun.target.position.set(0, 0, -70);
+
+  // ---- procedural wood texture ----
+  function makeWoodTexture() {
+    const c = document.createElement('canvas');
+    c.width = 256; c.height = 1024;
+    const g = c.getContext('2d');
+    const grad = g.createLinearGradient(0, 0, 0, c.height);
+    grad.addColorStop(0, '#8a5a28');
+    grad.addColorStop(0.5, '#96632c');
+    grad.addColorStop(1, '#7a4a1f');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, c.width, c.height);
+    for (let i = 0; i < 26; i++) {
+      const baseX = Math.random() * c.width;
+      const amp = 4 + Math.random() * 10;
+      const freq = 0.006 + Math.random() * 0.012;
+      const phase = Math.random() * Math.PI * 2;
+      const dark = Math.random() < 0.6;
+      g.strokeStyle = dark ? `rgba(35,20,8,${0.05 + Math.random() * 0.1})` : `rgba(240,200,140,${0.04 + Math.random() * 0.08})`;
+      g.lineWidth = 1 + Math.random() * 2;
+      g.beginPath();
+      for (let y = 0; y <= c.height; y += 8) {
+        const x = baseX + amp * Math.sin(freq * y + phase);
+        if (y === 0) g.moveTo(x, y); else g.lineTo(x, y);
+      }
+      g.stroke();
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+  const woodTexture = makeWoodTexture();
+
+  function makeNumberTexture(n) {
+    const c = document.createElement('canvas');
+    c.width = 128; c.height = 128;
+    const g = c.getContext('2d');
+    g.fillStyle = '#f3e2c0';
+    g.font = 'bold 90px Segoe UI, Arial';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(String(n), 64, 70);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+
+  // high-contrast badge for the lip sign: a dark circle behind a bright number so it
+  // still reads clearly from the normal, zoomed-out resting camera view
+  function makeLipNumberTexture(n) {
+    const c = document.createElement('canvas');
+    c.width = 160; c.height = 160;
+    const g = c.getContext('2d');
+    g.fillStyle = '#241407';
+    g.beginPath();
+    g.arc(80, 80, 74, 0, Math.PI * 2);
+    g.fill();
+    g.strokeStyle = '#f0d9a8';
+    g.lineWidth = 6;
+    g.stroke();
+    g.fillStyle = '#ffe9a8';
+    g.font = 'bold 108px Segoe UI, Arial';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(String(n), 80, 86);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+
+  // ---- board + tray surface (one continuous wooden slab) ----
+  const bottomHalf = BOARD.widthBottom / 2;
+  const topHalf = BOARD.widthTop / 2;
+  const trayHalf = TRAY.widthBottom / 2;
+
+  function buildSurface() {
+    const pts = [
+      [-trayHalf, -TRAY_LENGTH],
+      [trayHalf, -TRAY_LENGTH],
+      [bottomHalf, 0],
+      [topHalf, BOARD.length],
+      [-topHalf, BOARD.length],
+      [-bottomHalf, 0],
+    ];
+    const minX = -trayHalf, maxX = trayHalf, minY = -TRAY_LENGTH, maxY = BOARD.length;
+    const positions = [], uvs = [], normals = [];
+    function pushVert(bx, by) {
+      positions.push(bx, 0, -by);
+      uvs.push((bx - minX) / (maxX - minX), (by - minY) / (maxY - minY));
+      normals.push(0, 1, 0);
+    }
+    // two quads: tray trapezoid (0,1,2,5) and board trapezoid (5,2,3,4)
+    const quadA = [0, 1, 2, 5];
+    const quadB = [5, 2, 3, 4];
+    const indices = [];
+    let vi = 0;
+    [quadA, quadB].forEach(quad => {
+      quad.forEach(idx => pushVert(pts[idx][0], pts[idx][1]));
+      indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
+      vi += 4;
+    });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+    geo.setIndex(indices);
+    // varnished-wood finish: a physical material with a glossy clearcoat layer on top of the
+    // matte wood texture, so the lane catches the light like a real lacquered sjoelen board
+    const mat = new THREE.MeshPhysicalMaterial({
+      map: woodTexture, roughness: 0.42, metalness: 0.02,
+      clearcoat: 0.65, clearcoatRoughness: 0.18,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.receiveShadow = true;
+    return mesh;
+  }
+  scene.add(buildSurface());
+
+  // thin skirt around the outer edge so the board reads as a solid slab, not paper
+  function buildSkirt() {
+    const pts = [
+      [-trayHalf, -TRAY_LENGTH], [trayHalf, -TRAY_LENGTH],
+      [bottomHalf, 0], [topHalf, BOARD.length], [-topHalf, BOARD.length], [-bottomHalf, 0],
+    ];
+    const group = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color: 0x2a1a0c, roughness: 0.9 });
+    const skirtH = 6;
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length];
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (len < 0.01) continue;
+      const geo = new THREE.BoxGeometry(len, skirtH, 1.2);
+      const mesh = new THREE.Mesh(geo, mat);
+      // sunk very slightly below the surface plane so its top face is never exactly
+      // coplanar with the board surface mesh - that coincidence was causing a
+      // flickering/shimmering z-fight along the outer edges, especially during the camera zoom
+      mesh.position.set((a[0] + b[0]) / 2, -skirtH / 2 - 0.12, -(a[1] + b[1]) / 2);
+      mesh.rotation.y = -Math.atan2(-(b[1] - a[1]), b[0] - a[0]);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      group.add(mesh);
+    }
+    return group;
+  }
+  scene.add(buildSkirt());
+
+  // ---- gate housing: recessed pocket floors + back wall + dividing posts + front lip ----
+  const gateGroup = new THREE.Group();
+  scene.add(gateGroup);
+
+  const slotColors = [0x8a5a28, 0x7d4f22, 0x8a5a28, 0x7d4f22];
+  slots.forEach((s, i) => {
+    const [sl, sr] = s;
+    const w = sr - sl;
+    const d = BOARD.gateDepth;
+    const floorGeo = new THREE.PlaneGeometry(w, d);
+    const floorMat = new THREE.MeshStandardMaterial({ color: slotColors[i], roughness: 0.9 });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set((sl + sr) / 2, -GATE_PIT_DEPTH, -(BOARD.length + d / 2));
+    floor.receiveShadow = true;
+    gateGroup.add(floor);
+
+    const backMat = new THREE.MeshStandardMaterial({ color: 0x2a1a0c, roughness: 0.9 });
+    const back = new THREE.Mesh(new THREE.BoxGeometry(w, GATE_PIT_DEPTH, 1.5), backMat);
+    back.position.set((sl + sr) / 2, -GATE_PIT_DEPTH / 2, -(BOARD.length + d));
+    back.castShadow = true; back.receiveShadow = true;
+    gateGroup.add(back);
+
+    // one high-contrast value badge lies flat on the pocket floor. Since every scored disc
+    // is immediately lifted out to the stack behind the goal, the pocket floor always stays
+    // empty - so this badge is permanently visible, never covered by discs, and never
+    // overlaps the goal mouth the way the old lip sign did.
+    const badgeTex = makeLipNumberTexture(SLOT_VALUES[i]);
+    const badgeMat = new THREE.MeshBasicMaterial({ map: badgeTex, transparent: true });
+    const badgeSize = Math.min(w, d * 0.7) * 0.92;
+    const badge = new THREE.Mesh(new THREE.PlaneGeometry(badgeSize, badgeSize), badgeMat);
+    badge.rotation.x = -Math.PI / 2;
+    // sit the badge deep in the pocket, near the back wall, so the bright front lip never
+    // occludes it when the camera zooms in low over the gate
+    badge.position.set((sl + sr) / 2, -GATE_PIT_DEPTH + 0.1, -(BOARD.length + d * 0.78));
+    gateGroup.add(badge);
+  });
+
+  const postMat = new THREE.MeshStandardMaterial({ color: 0x6b4322, roughness: 0.7 });
+  postXs.forEach(px => {
+    const wall = new THREE.Mesh(
+      new THREE.BoxGeometry(BOARD.postWidth, GATE_PIT_DEPTH, BOARD.gateDepth + 1),
+      postMat
+    );
+    wall.position.set(px, -GATE_PIT_DEPTH / 2, -(BOARD.length + BOARD.gateDepth / 2));
+    wall.castShadow = true; wall.receiveShadow = true;
+    gateGroup.add(wall);
+
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(BOARD.postWidth * 0.9, BOARD.postWidth * 0.9, 3, 16), postMat);
+    cap.position.set(px, 1.5, -(BOARD.length - 0.5));
+    cap.castShadow = true;
+    gateGroup.add(cap);
+  });
+
+  // outer side frames - solid wooden blocks that seal each corner so the outermost pockets
+  // are no wider than the lane opening allows (matches the collision barriers)
+  gateBarriers.slice(3).forEach(b => {
+    const frame = new THREE.Mesh(
+      new THREE.BoxGeometry(b.halfW * 2, GATE_PIT_DEPTH + 3, BOARD.gateDepth + 1),
+      postMat
+    );
+    frame.position.set(b.x, -GATE_PIT_DEPTH / 2 + 1.5, -(BOARD.length + BOARD.gateDepth / 2));
+    frame.castShadow = true; frame.receiveShadow = true;
+    gateGroup.add(frame);
+  });
+
+  // raised front lip - only spans the actual opening (between the two side frames), so its
+  // bright edge no longer overhangs the lane sides and no longer visually widens the corners
+  const lipInnerHalf = slots[3][1]; // outer edge of the last opening
+  const lip = new THREE.Mesh(
+    new THREE.BoxGeometry(lipInnerHalf * 2, 1.4, 2),
+    new THREE.MeshStandardMaterial({ color: 0xf0d9a8, roughness: 0.5 })
+  );
+  lip.position.set(0, 0.7, -BOARD.length);
+  lip.castShadow = true; lip.receiveShadow = true;
+  scene.add(lip);
+
+  // ---- return tray: recessed floor + separator crossbar + spare pucks ----
+  const trayFloor = new THREE.Mesh(
+    new THREE.PlaneGeometry(TRAY.widthBottom, TRAY_LENGTH),
+    new THREE.MeshStandardMaterial({ color: 0x3a2410, roughness: 0.9, map: woodTexture })
+  );
+  trayFloor.rotation.x = -Math.PI / 2;
+  trayFloor.position.set(0, -TRAY_PIT_DEPTH, TRAY_LENGTH / 2);
+  trayFloor.receiveShadow = true;
+  scene.add(trayFloor);
+
+  const crossbar = new THREE.Mesh(
+    new THREE.BoxGeometry(TRAY.widthBottom + 2, 3, 3),
+    new THREE.MeshStandardMaterial({ color: 0x241407, roughness: 0.8 })
+  );
+  crossbar.position.set(0, 0, 0);
+  crossbar.castShadow = true; crossbar.receiveShadow = true;
+  scene.add(crossbar);
+  for (let i = -3; i <= 3; i++) {
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.8, 12, 12), new THREE.MeshStandardMaterial({ color: 0x8a5a2e }));
+    dot.position.set(i * (bottomHalf / 3.5), 1.6, 0);
+    scene.add(dot);
+  }
+
+  // turned-wood look for the disc faces: concentric growth rings + faint radial grain,
+  // so the top of each disc reads as a real wooden puck instead of a flat plastic cap
+  function makePuckFaceTexture() {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const g = c.getContext('2d');
+    const cx = 64, cy = 64;
+    const base = g.createRadialGradient(cx - 12, cy - 12, 4, cx, cy, 64);
+    base.addColorStop(0, '#e6b566');
+    base.addColorStop(0.6, '#d29a44');
+    base.addColorStop(1, '#b87a2c');
+    g.fillStyle = base;
+    g.fillRect(0, 0, 128, 128);
+    // concentric rings, slightly off-centre like real turned wood
+    for (let r = 6; r < 66; r += 3 + Math.random() * 3) {
+      g.beginPath();
+      g.arc(cx + 5, cy + 3, r, 0, Math.PI * 2);
+      g.strokeStyle = `rgba(90,55,20,${0.06 + Math.random() * 0.08})`;
+      g.lineWidth = 0.8 + Math.random();
+      g.stroke();
+    }
+    // a few faint radial grain streaks
+    for (let i = 0; i < 10; i++) {
+      const a = Math.random() * Math.PI * 2;
+      g.beginPath();
+      g.moveTo(cx, cy);
+      g.lineTo(cx + Math.cos(a) * 64, cy + Math.sin(a) * 64);
+      g.strokeStyle = `rgba(70,45,18,${0.03 + Math.random() * 0.04})`;
+      g.lineWidth = 1;
+      g.stroke();
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+  const puckFaceTexture = makePuckFaceTexture();
+  const puckMat = new THREE.MeshStandardMaterial({ map: puckFaceTexture, color: 0xffffff, roughness: 0.55, metalness: 0.05 });
+  const puckEdgeMat = new THREE.MeshStandardMaterial({ color: 0x8a5a28, roughness: 0.7 });
+  function makePuckMesh() {
+    const geo = new THREE.CylinderGeometry(PUCK_R, PUCK_R, PUCK_H, 32);
+    const mesh = new THREE.Mesh(geo, [puckEdgeMat, puckMat, puckMat]);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    return mesh;
+  }
+
+  // scored discs pile up here, behind each goal's back wall - just like real sjoelen players
+  // stack the successful discs behind the board to tally them up
+  const scoreStackGroup = new THREE.Group();
+  scene.add(scoreStackGroup);
+  function rebuildScoreStack() {
+    while (scoreStackGroup.children.length) scoreStackGroup.remove(scoreStackGroup.children[0]);
+    const p = players[curPlayerIdx];
+    if (!p) return;
+    const stackZ = -(GATE_BACK_Y + 4);
+    slots.forEach((s, i) => {
+      const cx = (s[0] + s[1]) / 2;
+      const count = p.slotCounts[i];
+      const perColumn = 6;
+      for (let k = 0; k < count; k++) {
+        const col = Math.floor(k / perColumn);
+        const row = k % perColumn;
+        const m = makePuckMesh();
+        m.position.set(cx + col * (PUCK_R * 2.3), row * (PUCK_H * 0.92) + PUCK_H / 2, stackZ);
+        scoreStackGroup.add(m);
+      }
+    });
+  }
+
+  // reserve-disc indicator: a row of little disc pips in the HUD that deplete as the player
+  // (or the shot clock) uses each disc. The 3D return tray sits below the framed area on a
+  // phone, so this always-visible strip is what shows "how many are left".
+  (function buildReservePips() {
+    for (let k = 0; k < DISCS_PER_PLAYER; k++) {
+      const pip = document.createElement('span');
+      pip.className = 'pip';
+      reserveEl.appendChild(pip);
+    }
+  })();
+  const reservePips = Array.from(reserveEl.children);
+  function updateTrayDiscs() {
+    const atLine = (puck && puck.state === 'ready') ? 1 : 0;
+    const show = gamePhase === 'playing' ? Math.max(0, shotsLeft - atLine) : 0;
+    for (let i = 0; i < reservePips.length; i++) reservePips[i].classList.toggle('used', i >= show);
+  }
+
+  // ---- floating "+N" score marks and the SET celebration flash ----
+  const _projV = new THREE.Vector3();
+  function worldToScreen(x, y, z) {
+    _projV.set(x, y, z).project(camera);
+    return {
+      x: (_projV.x * 0.5 + 0.5) * renderer.domElement.clientWidth,
+      y: (1 - (_projV.y * 0.5 + 0.5)) * renderer.domElement.clientHeight,
+    };
+  }
+  function showScorePopup(slotIndex, value) {
+    const cx = (slots[slotIndex][0] + slots[slotIndex][1]) / 2;
+    const s = worldToScreen(cx, 5, -BOARD.length);
+    const el = document.createElement('div');
+    el.className = 'scorePopup';
+    el.textContent = '+' + value;
+    el.style.left = s.x + 'px';
+    el.style.top = s.y + 'px';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 1150);
+  }
+  function flashSet() {
+    setFlashEl.classList.remove('show');
+    void setFlashEl.offsetWidth; // force reflow so the animation restarts every time
+    setFlashEl.classList.add('show');
+  }
+
+  // dashed start line
+  {
+    const points = [];
+    for (let x = -boardHalfWidthAt(startY); x <= boardHalfWidthAt(startY); x += 3) {
+      points.push(new THREE.Vector3(x, 0.15, -startY), new THREE.Vector3(Math.min(x + 1.6, boardHalfWidthAt(startY)), 0.15, -startY));
+    }
+    const geo = new THREE.BufferGeometry().setFromPoints(points);
+    const line = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55 }));
+    scene.add(line);
+  }
+
+  // aim line (updated while dragging)
+  const aimGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+  const aimLine = new THREE.Line(aimGeo, new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 2, gapSize: 1.2, transparent: true, opacity: 0.8 }));
+  aimLine.visible = false;
+  scene.add(aimLine);
+  const aimBall = new THREE.Mesh(new THREE.SphereGeometry(1.4, 16, 16), new THREE.MeshBasicMaterial({ color: 0x88ff66 }));
+  aimBall.visible = false;
+  scene.add(aimBall);
+
+  function resize() {
+    const adH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ad-h')) || 0;
+    const W = window.innerWidth, H = window.innerHeight - adH;
+    renderer.setSize(W, H);
+    layoutCamera();
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ================= INPUT (raycast onto the y=0 board plane) =================
+  const raycaster = new THREE.Raycaster();
+  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const ndc = new THREE.Vector2();
+  const hitPoint = new THREE.Vector3();
+
+  function boardPointFromClient(clientX, clientY) {
+    ndc.x = (clientX / renderer.domElement.clientWidth) * 2 - 1;
+    ndc.y = -(clientY / renderer.domElement.clientHeight) * 2 + 1;
+    raycaster.setFromCamera(ndc, camera);
+    if (raycaster.ray.intersectPlane(groundPlane, hitPoint)) {
+      return { x: hitPoint.x, y: -hitPoint.z };
+    }
+    return null;
+  }
+
+  let dragging = false;
+  let dragStartBoard = null;
+  let dragCurBoard = null;
+
+  // ---- shot clock: 8s while the disc waits untouched, 4s once the player grabs it; if it
+  // ---- runs out the machine takes a slow auto-shot to the middle (anti-stalling for online) ----
+  const READY_TIME = 8, AIM_TIME = 4;
+  let aimStarted = false;
+  let shotTimer = 0;
+  let shotTimerPhase = null; // 'ready' | 'aim' | null
+  function clearShotTimer() { shotTimerPhase = null; updateTimerDisplay(); }
+  function anyOverlayOpen() {
+    return [setupEl, passScreenEl, resultsScreenEl, scoreboardPanelEl]
+      .some(el => el && el.style.display !== 'none' && el.style.display !== '');
+  }
+  function updateShotTimer(dt) {
+    if (gamePhase !== 'playing' || !puck || puck.state !== 'ready' || anyOverlayOpen()) {
+      if ((!puck || puck.state !== 'ready') && shotTimerPhase) clearShotTimer();
+      else updateTimerDisplay();
+      return;
+    }
+    const desired = aimStarted ? 'aim' : 'ready';
+    if (shotTimerPhase !== desired) {
+      shotTimerPhase = desired;
+      shotTimer = desired === 'aim' ? AIM_TIME : READY_TIME;
+    }
+    shotTimer -= dt;
+    if (shotTimer <= 0) { shotTimer = 0; updateTimerDisplay(); autoLaunch(); return; }
+    updateTimerDisplay();
+  }
+  function updateTimerDisplay() {
+    if (!shotTimerPhase) { timerEl.style.display = 'none'; return; }
+    const secs = Math.ceil(shotTimer);
+    timerEl.style.display = 'block';
+    timerEl.textContent = secs;
+    // warn colour: green normally, amber under the aim clock, red in the last 3s
+    timerEl.classList.toggle('warn', shotTimerPhase === 'aim');
+    timerEl.classList.toggle('danger', shotTimer <= 3);
+  }
+
+  function pointerDown(clientX, clientY) {
+    Sound.ensure();
+    if (gamePhase !== 'playing' || puck.state !== 'ready') return;
+    const p = boardPointFromClient(clientX, clientY);
+    if (!p) return;
+    const d = Math.hypot(p.x - puck.x, p.y - puck.y);
+    if (d < 14) {
+      dragging = true;
+      aimStarted = true; // once grabbed, switch to the shorter aiming countdown for good
+      dragStartBoard = { x: puck.x, y: puck.y };
+      dragCurBoard = p;
+    }
+  }
+  function pointerMove(clientX, clientY) {
+    if (!dragging) return;
+    const p = boardPointFromClient(clientX, clientY);
+    if (p) dragCurBoard = p;
+  }
+  function doLaunch(vx, vy, power) {
+    if (!puck || puck.state !== 'ready') return;
+    dragging = false;
+    aimLine.visible = false;
+    aimBall.visible = false;
+    puck.vx = vx;
+    puck.vy = vy;
+    puck.state = 'flying';
+    Sound.launch(power);
+    shotScored = 0;             // start tallying this shot's points from zero
+    shotFeedbackPending = true;
+    camTargetPuck = puck; // camera keeps following THIS disc even after the next one spawns
+    shotsLeft--;
+    refreshHud();
+    resetBtn.style.display = 'none';
+    hintEl.style.display = 'none';
+    clearShotTimer();
+  }
+
+  // machine takes the shot for a stalling player: a slow, straight push that leaves the disc
+  // roughly in the middle of the lane (prevents time-wasting / stalling in online play)
+  function autoLaunch() {
+    if (!puck || puck.state !== 'ready') return;
+    // friction 50, from startY to ~mid lane => v = sqrt(2*FRICTION*distance)
+    const midDist = BOARD.length * 0.5 - startY;
+    const vy = Math.sqrt(2 * FRICTION * midDist) * 1.02;
+    doLaunch(0, vy, 0.35);
+  }
+
+  const MAX_PULL = 34;
+  const POWER_SCALE = 7.4; // compensate the higher friction so a firm pull still reaches the gate
+  function pointerUp() {
+    if (!dragging) return;
+    dragging = false;
+    aimLine.visible = false;
+    aimBall.visible = false;
+    const dx = dragCurBoard.x - dragStartBoard.x;
+    const dy = dragCurBoard.y - dragStartBoard.y;
+    let vx = -dx, vy = -dy;
+    const mag = Math.hypot(vx, vy);
+    const clampedMag = Math.min(mag, MAX_PULL);
+    if (clampedMag < 3) return; // released without a real throw - aim timer keeps ticking
+    const nx = vx / (mag || 1), ny = vy / (mag || 1);
+    if (ny <= 0.05) return;
+    doLaunch(nx * clampedMag * POWER_SCALE, ny * clampedMag * POWER_SCALE, clampedMag / MAX_PULL);
+  }
+
+  canvas.addEventListener('pointerdown', e => pointerDown(e.clientX, e.clientY));
+  canvas.addEventListener('pointermove', e => pointerMove(e.clientX, e.clientY));
+  window.addEventListener('pointerup', pointerUp);
+  window.addEventListener('pointercancel', pointerUp);
+
+  function discWorldY(p) {
+    if (p.y <= BOARD.length) return PUCK_H / 2;
+    const t = Math.min(1, (p.y - BOARD.length) / 5);
+    return THREE.MathUtils.lerp(PUCK_H / 2, -GATE_PIT_DEPTH + PUCK_H / 2, t);
+  }
+
+  function updateAimVisuals() {
+    if (!dragging) return;
+    aimLine.visible = true;
+    aimBall.visible = true;
+    const y = PUCK_H / 2 + 0.5;
+    const positions = aimLine.geometry.attributes.position;
+    positions.setXYZ(0, puck.x, y, -puck.y);
+    positions.setXYZ(1, dragCurBoard.x, y, -dragCurBoard.y);
+    positions.needsUpdate = true;
+    aimLine.computeLineDistances();
+    aimBall.position.set(dragCurBoard.x, y, -dragCurBoard.y);
+    const pull = Math.min(Math.hypot(dragCurBoard.x - puck.x, dragCurBoard.y - puck.y), 34);
+    const pct = pull / 34;
+    aimBall.material.color.setHSL((1 - pct) * 0.33, 0.8, 0.55);
+  }
+
+  let lastTime = null;
+  function frame(t) {
+    if (lastTime == null) lastTime = t;
+    let dt = (t - lastTime) / 1000;
+    lastTime = t;
+    dt = Math.min(dt, 0.032);
+
+    if (gamePhase === 'playing') {
+      stepAllPucks(dt);
+      pruneScoredPucks();
+      maybeAdvanceFlow();
+    }
+
+    let maxSpeed = 0;
+    for (const p of boardPucks) {
+      if (p.mesh) p.mesh.position.set(p.x, discWorldY(p), -p.y);
+      if (p.state === 'flying') {
+        const s = Math.hypot(p.vx, p.vy);
+        if (s > maxSpeed) maxSpeed = s;
+      }
+    }
+    Sound.setSlide(gamePhase === 'playing' ? Math.min(1, maxSpeed / 150) : 0);
+    updateShotTimer(dt);
+    updateAimVisuals();
+    updateCamera(dt);
+
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  const MAX_ZOOM_BLEND = 0.9; // cap how far the zoom-in can go, so it stays gentle
+  const HOLD_DURATION = 0.5;   // seconds to hold the close-up once the puck stops
+  const RETREAT_DURATION = 1.3; // seconds to ease back out to the resting view
+  let camPhase = 'rest'; // 'rest' | 'zoomIn' | 'hold' | 'zoomOut'
+  let holdTimer = 0;
+  let retreatT = 0;
+  let retreatFrom = 0;
+  // the disc the camera is currently tracking - kept separate from the general-purpose
+  // `puck` variable (which reassigns to the next ready disc the instant the board
+  // settles) so the hold/zoom-out animation keeps smoothly easing away from the disc
+  // that was actually thrown, instead of jumping to the newly spawned one mid-transition
+  let camTargetPuck = null;
+  function easeInOutCubic(t) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+  function updateCamera(dt) {
+    if (!camTargetPuck) {
+      camBlend = 0;
+      camera.position.copy(restCamPos);
+      camera.lookAt(restCamLook);
+      return;
+    }
+    if (camTargetPuck.state === 'flying') {
+      camPhase = 'zoomIn';
+    } else if (camPhase === 'zoomIn') {
+      camPhase = 'hold';
+      holdTimer = HOLD_DURATION;
+    } else if (camPhase === 'hold') {
+      holdTimer -= dt;
+      if (holdTimer <= 0) { camPhase = 'zoomOut'; retreatT = 0; retreatFrom = camBlend; }
+    } else if (camPhase === 'zoomOut') {
+      retreatT = Math.min(1, retreatT + dt / RETREAT_DURATION);
+      if (retreatT >= 1) {
+        camPhase = 'rest';
+        camTargetPuck = null;
+        camBlend = 0;
+        camera.position.copy(restCamPos);
+        camera.lookAt(restCamLook);
+        return;
+      }
+    }
+
+    if (camPhase === 'zoomIn' || camPhase === 'hold') {
+      // the zoom target tracks how far the puck has actually traveled down the lane
+      // (eased so it decelerates on its own as the puck nears the gate), rather than
+      // a fixed time-based ramp - so the camera settles exactly as the puck arrives
+      const progress = Math.min(1, Math.max(0, camTargetPuck.y / BOARD.length));
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const target = MAX_ZOOM_BLEND * eased;
+      const smooth = 1 - Math.exp(-dt * 3.5);
+      camBlend += (target - camBlend) * smooth;
+    } else if (camPhase === 'zoomOut') {
+      camBlend = retreatFrom * (1 - easeInOutCubic(retreatT));
+    } else {
+      camBlend = 0;
+    }
+
+    const puckZ = -camTargetPuck.y;
+    followPos.set(camTargetPuck.x * 0.35, followHeight, puckZ + followBehind);
+    followLook.set(camTargetPuck.x * 0.5, -3, puckZ - followLookAhead);
+
+    curCamPos.lerpVectors(restCamPos, followPos, camBlend);
+    curCamLook.lerpVectors(restCamLook, followLook, camBlend);
+    camera.position.copy(curCamPos);
+    camera.lookAt(curCamLook);
+  }
+})();
+</script>
+</body>
+</html>
