@@ -764,6 +764,7 @@
     players = inputs.map((inp, i) => ({
       name: (inp.value.trim() || t('player', { n: i + 1 })),
       slotCounts: [0, 0, 0, 0],
+      cycleLit: [false, false, false, false],
       remaining: DISCS_PER_PLAYER,
     }));
     curRound = 1;
@@ -833,9 +834,8 @@
       return;
     }
     const p = players[curPlayerIdx];
-    const baseline = p.celebratedSets || 0;
     gateFloors.forEach((f, i) => {
-      const hex = p.slotCounts[i] > baseline ? POCKET_YELLOW : POCKET_WHITE;
+      const hex = p.cycleLit[i] ? POCKET_YELLOW : POCKET_WHITE;
       f.material.color.setHex(hex);
       gateLips[i].material.color.setHex(hex);
     });
@@ -856,8 +856,10 @@
       flashSet();
       gateFloors.forEach(f => f.material.color.setHex(POCKET_GREEN));
       gateLips.forEach(l => l.material.color.setHex(POCKET_GREEN));
+      p.cycleLit = [false, false, false, false];
       setTimeout(refreshPocketColors, 450);
     } else {
+      p.cycleLit[slotIndex] = true;
       Sound.score();
       Haptics.buzz(20);
       refreshPocketColors();
