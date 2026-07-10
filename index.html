@@ -819,7 +819,23 @@
     roundEnding = false;
     spawnReadyPuck();
     rebuildScoreStack();
+    refreshPocketColors();
     refreshHud();
+  }
+
+  // pocket floors mirror each player's progress toward their next SET: white = empty this
+  // cycle, yellow = already landed a disc this cycle. Called whenever the active player or
+  // their scored slots change, so the boards always reflect whoever is currently throwing.
+  function refreshPocketColors() {
+    if (gamePhase !== 'playing' || !players[curPlayerIdx]) {
+      gateFloors.forEach(f => f.material.color.setHex(POCKET_WHITE));
+      return;
+    }
+    const p = players[curPlayerIdx];
+    const baseline = p.celebratedSets || 0;
+    gateFloors.forEach((f, i) => {
+      f.material.color.setHex(p.slotCounts[i] > baseline ? POCKET_YELLOW : POCKET_WHITE);
+    });
   }
 
   function onDiscScored(slotIndex) {
@@ -835,9 +851,12 @@
       Sound.setDone();
       Haptics.buzz([25, 40, 25]);
       flashSet();
+      gateFloors.forEach(f => f.material.color.setHex(POCKET_GREEN));
+      setTimeout(refreshPocketColors, 450);
     } else {
       Sound.score();
       Haptics.buzz(20);
+      refreshPocketColors();
     }
     refreshHud();
   }
@@ -1232,18 +1251,23 @@
   const gateGroup = new THREE.Group();
   scene.add(gateGroup);
 
-  const slotColors = [0x8a5a28, 0x7d4f22, 0x8a5a28, 0x7d4f22];
+  // pocket floors double as the SET progress indicator: white = not yet scored this cycle,
+  // yellow = already landed a disc this cycle, all four flash green when a SET completes
+  // (see refreshPocketColors / onDiscScored below), then reset to white for the next cycle.
+  const POCKET_WHITE = 0xf2ead4, POCKET_YELLOW = 0xf0c93c, POCKET_GREEN = 0x5fe37a;
+  const gateFloors = [];
   slots.forEach((s, i) => {
     const [sl, sr] = s;
     const w = sr - sl;
     const d = BOARD.gateDepth;
     const floorGeo = new THREE.PlaneGeometry(w, d);
-    const floorMat = new THREE.MeshStandardMaterial({ color: slotColors[i], roughness: 0.9 });
+    const floorMat = new THREE.MeshStandardMaterial({ color: POCKET_WHITE, roughness: 0.9 });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.position.set((sl + sr) / 2, -GATE_PIT_DEPTH, -(BOARD.length + d / 2));
     floor.receiveShadow = true;
     gateGroup.add(floor);
+    gateFloors.push(floor);
 
     const backMat = new THREE.MeshStandardMaterial({ color: 0x2a1a0c, roughness: 0.9 });
     const back = new THREE.Mesh(new THREE.BoxGeometry(w, GATE_PIT_DEPTH, 1.5), backMat);
