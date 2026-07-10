@@ -829,12 +829,15 @@
   function refreshPocketColors() {
     if (gamePhase !== 'playing' || !players[curPlayerIdx]) {
       gateFloors.forEach(f => f.material.color.setHex(POCKET_WHITE));
+      gateLips.forEach(l => l.material.color.setHex(POCKET_WHITE));
       return;
     }
     const p = players[curPlayerIdx];
     const baseline = p.celebratedSets || 0;
     gateFloors.forEach((f, i) => {
-      f.material.color.setHex(p.slotCounts[i] > baseline ? POCKET_YELLOW : POCKET_WHITE);
+      const hex = p.slotCounts[i] > baseline ? POCKET_YELLOW : POCKET_WHITE;
+      f.material.color.setHex(hex);
+      gateLips[i].material.color.setHex(hex);
     });
   }
 
@@ -852,6 +855,7 @@
       Haptics.buzz([25, 40, 25]);
       flashSet();
       gateFloors.forEach(f => f.material.color.setHex(POCKET_GREEN));
+      gateLips.forEach(l => l.material.color.setHex(POCKET_GREEN));
       setTimeout(refreshPocketColors, 450);
     } else {
       Sound.score();
@@ -1318,16 +1322,21 @@
     gateGroup.add(frame);
   });
 
-  // raised front lip - only spans the actual opening (between the two side frames), so its
-  // bright edge no longer overhangs the lane sides and no longer visually widens the corners
-  const lipInnerHalf = slots[3][1]; // outer edge of the last opening
-  const lip = new THREE.Mesh(
-    new THREE.BoxGeometry(lipInnerHalf * 2, 1.4, 2),
-    new THREE.MeshStandardMaterial({ color: 0xf0d9a8, roughness: 0.5 })
-  );
-  lip.position.set(0, 0.7, -BOARD.length);
-  lip.castShadow = true; lip.receiveShadow = true;
-  scene.add(lip);
+  // raised front lip - one segment per pocket (instead of a single bar across the whole
+  // opening) so each entrance line can show that pocket's own SET progress color, same as
+  // the pocket floor: white = not scored yet this cycle, yellow = scored, green = SET flash.
+  const gateLips = [];
+  slots.forEach(([sl, sr]) => {
+    const w = sr - sl;
+    const lipSeg = new THREE.Mesh(
+      new THREE.BoxGeometry(w, 1.4, 2),
+      new THREE.MeshStandardMaterial({ color: POCKET_WHITE, roughness: 0.5 })
+    );
+    lipSeg.position.set((sl + sr) / 2, 0.7, -BOARD.length);
+    lipSeg.castShadow = true; lipSeg.receiveShadow = true;
+    scene.add(lipSeg);
+    gateLips.push(lipSeg);
+  });
 
   // ---- return tray: recessed floor + separator crossbar + spare pucks ----
   const trayFloor = new THREE.Mesh(
