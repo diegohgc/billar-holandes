@@ -14,8 +14,10 @@
     font-family: 'Segoe UI', Arial, sans-serif; user-select: none;
   }
   #adBanner {
-    position: fixed; left: 0; right: 0; bottom: 0; height: var(--ad-h);
+    position: fixed; left: 0; right: 0; bottom: 0;
+    height: calc(var(--ad-h) + env(safe-area-inset-bottom));
     z-index: 40; display: flex; align-items: center; justify-content: center;
+    padding-bottom: env(safe-area-inset-bottom);
     background: #1a1006; border-top: 1px solid #3a2410;
     color: #f3e2c055; font-size: 11px; letter-spacing: 1px;
   }
@@ -78,13 +80,13 @@
     100% { opacity: 0; transform: translate(-50%, -160%) scale(1); }
   }
   #resetBtn {
-    position: fixed; bottom: calc(18px + var(--ad-h)); left: 50%; transform: translateX(-50%);
+    position: fixed; bottom: calc(18px + var(--ad-h) + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
     padding: 12px 26px; border-radius: 30px; border: none; pointer-events: none;
     background: #c98a2ecc; color: #2a1a05; font-weight: 700; font-size: 16px;
     box-shadow: 0 4px 10px rgba(0,0,0,.4); z-index: 10; display: none;
   }
   #hint {
-    position: fixed; bottom: calc(20px + var(--ad-h)); left: 50%; transform: translateX(-50%);
+    position: fixed; bottom: calc(20px + var(--ad-h) + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
     color: #f3e2c0aa; font-size: 13px; z-index: 10; text-align: center; width: 90%;
   }
   canvas { display: block; touch-action: none; }
@@ -1468,7 +1470,7 @@
   scene.add(aimBall);
 
   function resize() {
-    const adH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ad-h')) || 0;
+    const adH = document.getElementById('adBanner').getBoundingClientRect().height || 0;
     const W = window.innerWidth, H = window.innerHeight - adH;
     renderer.setSize(W, H);
     layoutCamera();
