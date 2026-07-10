@@ -181,7 +181,7 @@
     <label data-i18n="numPlayers">Número de jugadores</label>
     <div class="playerCountRow">
       <button id="pcMinus">−</button>
-      <span id="pcVal">2</span>
+      <span id="pcVal">1</span>
       <button id="pcPlus">+</button>
     </div>
     <label data-i18n="names">Nombres</label>
@@ -717,7 +717,7 @@
   });
 
   // ---- setup screen ----
-  let playerCount = 2;
+  let playerCount = 1;
   function renderNameInputs() {
     const existing = Array.from(nameInputsEl.querySelectorAll('input')).map(i => i.value);
     nameInputsEl.innerHTML = '';
