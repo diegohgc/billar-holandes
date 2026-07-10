@@ -1055,7 +1055,7 @@
     camera.aspect = aspect;
     // portrait phones need a steeper, further-back camera to fit the whole lane
     const portrait = aspect < 0.9;
-    restCamPos.set(0, portrait ? 420 : 340, portrait ? 40 : 70);
+    restCamPos.set(0, portrait ? 365 : 340, portrait ? 40 : 70);
     followHeight = portrait ? 165 : 135;
     followBehind = portrait ? 130 : 100;
     followLookAhead = portrait ? 70 : 55;
