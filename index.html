@@ -41,7 +41,7 @@
     background: rgba(20,12,5,0.7); border: 2px solid #6fcf6f; color: #cdeecd;
     font-size: 16px; font-weight: 700; line-height: 30px; text-align: center;
     box-shadow: 0 2px 8px rgba(0,0,0,.4); pointer-events: none;
-    margin-top: 4px;
+    margin-top: 14px;
   }
   #timer.warn { border-color: #e0b23c; color: #f3e2c0; }
   #timer.danger { border-color: #e05a3c; color: #ffd7cc; }
@@ -882,11 +882,16 @@
   function onDiscScored(slotIndex) {
     const p = players[curPlayerIdx];
     p.slotCounts[slotIndex]++;
-    showScorePopup(slotIndex, SLOT_VALUES[slotIndex]);
 
-    // did this disc complete a brand-new full set (one in every goal)?
+    // did this disc complete a brand-new full set (one in every goal)? if so, the SET's flat
+    // 20-point bonus replaces this disc's own face value, so show 20 here instead of the
+    // small individual value - otherwise the floating popups people watch (2, 3, 4...) never
+    // seem to add up to what the big "SET!" banner claims
     const sets = Math.min(...p.slotCounts);
-    if (sets > (p.celebratedSets || 0)) {
+    const completesSet = sets > (p.celebratedSets || 0);
+    showScorePopup(slotIndex, completesSet ? 20 : SLOT_VALUES[slotIndex]);
+
+    if (completesSet) {
       p.celebratedSets = sets;
       Sound.setDone();
       Haptics.buzz([25, 40, 25]);
