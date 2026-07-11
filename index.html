@@ -37,11 +37,11 @@
   #soundBtn { padding: 5px 9px; margin-right: 4px; }
   #exitBtn { margin-left: 4px; border-color: #c9463288; background: rgba(201,70,50,0.18); }
   #timer {
-    position: fixed; top: calc(62px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
-    width: 46px; height: 46px; border-radius: 50%; z-index: 10; display: none;
+    width: 34px; height: 34px; border-radius: 50%; z-index: 10; display: none;
     background: rgba(20,12,5,0.7); border: 2px solid #6fcf6f; color: #cdeecd;
-    font-size: 22px; font-weight: 700; line-height: 42px; text-align: center;
+    font-size: 16px; font-weight: 700; line-height: 30px; text-align: center;
     box-shadow: 0 2px 8px rgba(0,0,0,.4); pointer-events: none;
+    margin-top: 4px;
   }
   #timer.warn { border-color: #e0b23c; color: #f3e2c0; }
   #timer.danger { border-color: #e05a3c; color: #ffd7cc; }
@@ -139,16 +139,18 @@
     <span data-i18n="round">Tanda</span> <span id="roundNum">1</span>/3 · <span data-i18n="discs">Fichas</span>: <span id="shotsLeft">20</span>
     <div id="reserve"></div>
   </div>
-  <div class="box" style="text-align:right">
-    <span data-i18n="points">Puntos</span>: <span id="curScore" class="big">0</span><br>
-    <button id="soundBtn">🔊</button>
-    <button id="scoreboardBtn" data-i18n="scoreboard">Marcador</button>
-    <button id="exitBtn" data-i18n="exitToMenu">Salir</button>
+  <div class="box" style="text-align:right; display:flex; flex-direction:column; align-items:flex-end;">
+    <span data-i18n="points">Puntos</span>: <span id="curScore" class="big">0</span>
+    <span>
+      <button id="soundBtn">🔊</button>
+      <button id="scoreboardBtn" data-i18n="scoreboard">Marcador</button>
+      <button id="exitBtn" data-i18n="exitToMenu">Salir</button>
+    </span>
+    <div id="timer">8</div>
   </div>
 </div>
 
 <canvas id="c"></canvas>
-<div id="timer">8</div>
 <div id="setFlash"><span data-i18n="setLabel">¡SET!</span><span>+20</span></div>
 <button id="resetBtn" data-i18n="nextDisc">Siguiente ficha</button>
 <div id="hint" data-i18n="hint">Arrastra la ficha hacia atrás y suelta para lanzar</div>
