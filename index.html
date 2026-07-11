@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>Sjoelen - Prototipo 3D</title>
+<title>PuckSlide — Billar Holandés</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
@@ -92,6 +92,7 @@
     box-shadow: 0 10px 30px rgba(0,0,0,.5); max-height: 88vh; overflow-y: auto;
   }
   .panel h1 { font-size: 22px; margin: 0 0 4px; text-align: center; }
+  .panel .brandSubtitle { margin: 0 0 10px; color: #f3e2c0aa; font-size: 14px; }
   .panel h2 { font-size: 19px; margin: 0 0 10px; text-align: center; }
   .panel p { color: #f3e2c0cc; font-size: 14px; text-align: center; }
   .panel label { display: block; font-size: 13px; color: #f3e2c0aa; margin: 14px 0 6px; }
@@ -152,7 +153,8 @@
 
 <div id="mainMenu" class="overlay">
   <div class="panel">
-    <h1 data-i18n="gameTitle">Billar Holandés</h1>
+    <h1>PuckSlide</h1>
+    <p class="brandSubtitle" data-i18n="gameTitle">Billar Holandés</p>
     <button id="menuLocalBtn" class="bigBtn" data-i18n="playLocal">Jugar Local</button>
     <button id="menuOnlineBtn" class="bigBtn" disabled data-i18n="playOnline">Jugar Online</button>
     <p id="onlineSoon" data-i18n="comingSoon">Próximamente</p>
@@ -170,7 +172,8 @@
 
 <div id="setup" class="overlay" style="display:none">
   <div class="panel">
-    <h1 data-i18n="gameTitle">Billar Holandés</h1>
+    <h1>PuckSlide</h1>
+    <p class="brandSubtitle" data-i18n="gameTitle">Billar Holandés</p>
     <p data-i18n="setupSubtitle">Configura la partida antes de empezar</p>
     <label data-i18n="numPlayers">Número de jugadores</label>
     <div class="playerCountRow">
@@ -290,7 +293,7 @@
   }
   function applyStaticI18n() {
     document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
-    document.title = t('gameTitle');
+    document.title = 'PuckSlide — ' + t('gameTitle');
   }
   applyStaticI18n();
 
