@@ -172,7 +172,6 @@
     <button id="menuOnlineBtn" class="bigBtn" disabled data-i18n="playOnline">Jugar Online</button>
     <p id="onlineSoon" data-i18n="comingSoon">Próximamente</p>
     <button id="menuInstructionsBtn" class="ghostBtn" data-i18n="instructions">Instrucciones</button>
-    <button id="menuLeaderboardBtn" class="ghostBtn" data-i18n="leaderboard">Clasificación</button>
   </div>
 </div>
 
@@ -206,8 +205,10 @@
     </div>
     <label data-i18n="names">Nombres</label>
     <div id="nameInputs"></div>
+    <datalist id="knownPlayerNames"></datalist>
     <p id="nameHint" data-i18n="nameHint" style="font-size:12px; color:#f3e2c088; margin:-4px 0 10px;">Pon un nombre para que tus puntuaciones cuenten para el récord global</p>
     <button id="startGameBtn" class="bigBtn" data-i18n="startGame">Empezar partida</button>
+    <button id="setupLeaderboardBtn" class="ghostBtn" data-i18n="leaderboard">Clasificación</button>
   </div>
 </div>
 
@@ -773,6 +774,15 @@
 
   // ---- setup screen ----
   let playerCount = 1;
+  function populateKnownPlayerNames() {
+    const knownListEl = document.getElementById('knownPlayerNames');
+    knownListEl.innerHTML = '';
+    loadGlobalRecords().forEach(rec => {
+      const opt = document.createElement('option');
+      opt.value = rec.name;
+      knownListEl.appendChild(opt);
+    });
+  }
   function renderNameInputs() {
     const existing = Array.from(nameInputsEl.querySelectorAll('input')).map(i => i.value);
     nameInputsEl.innerHTML = '';
@@ -781,6 +791,8 @@
       input.placeholder = t('player', { n: i + 1 });
       input.value = existing[i] || '';
       input.maxLength = 18;
+      input.setAttribute('list', 'knownPlayerNames');
+      input.setAttribute('autocomplete', 'off');
       nameInputsEl.appendChild(input);
     }
   }
@@ -788,6 +800,7 @@
   document.getElementById('menuLocalBtn').addEventListener('click', () => {
     mainMenuEl.style.display = 'none';
     setupEl.style.display = 'flex';
+    populateKnownPlayerNames();
   });
   document.getElementById('menuInstructionsBtn').addEventListener('click', () => {
     mainMenuEl.style.display = 'none';
@@ -797,13 +810,13 @@
     instructionsScreenEl.style.display = 'none';
     mainMenuEl.style.display = 'flex';
   });
-  document.getElementById('menuLeaderboardBtn').addEventListener('click', () => {
-    mainMenuEl.style.display = 'none';
+  document.getElementById('setupLeaderboardBtn').addEventListener('click', () => {
+    setupEl.style.display = 'none';
     showLeaderboard();
   });
   document.getElementById('closeLeaderboardBtn').addEventListener('click', () => {
     leaderboardScreenEl.style.display = 'none';
-    mainMenuEl.style.display = 'flex';
+    setupEl.style.display = 'flex';
   });
   function showLeaderboard() {
     const records = loadGlobalRecords().slice().sort((a, b) => b.score - a.score);
@@ -1141,6 +1154,7 @@
     resultsScreenEl.style.display = 'none';
     setupEl.style.display = 'flex';
     gamePhase = 'setup';
+    populateKnownPlayerNames();
   });
 
   document.getElementById('resultsMenuBtn').addEventListener('click', () => {
