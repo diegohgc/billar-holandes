@@ -426,12 +426,12 @@
   // externo; en su lugar usamos un esquema propio que la app declara en su AndroidManifest y que
   // el sistema operativo redirige de vuelta a MainActivity con el token en la URL.
   const isAndroidApp = new URLSearchParams(window.location.search).get('app') === 'android';
-  if (isAndroidApp) alert('DEBUG URL: ' + window.location.href);
+  if (isAndroidApp) console.log('DEBUG URL: ' + window.location.href);
   document.getElementById('onlineGoogleLoginBtn').addEventListener('click', async () => {
-    await sb.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: isAndroidApp ? 'puckslide://auth-callback' : window.location.href }
-    });
+    const redirectTo = isAndroidApp ? 'puckslide://auth-callback' : window.location.href;
+    console.log('DEBUG signInWithOAuth click, redirectTo=' + redirectTo);
+    const res = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } });
+    console.log('DEBUG signInWithOAuth result: ' + JSON.stringify(res));
   });
   function showOnlineLoginError(msg) {
     const el = document.getElementById('onlineLoginError');
@@ -562,6 +562,7 @@
   populateCountrySelect();
   // if we just came back from the Google OAuth redirect, this resolves the session from the URL
   sb.auth.getSession().then(async ({ data: { session } }) => {
+    console.log('DEBUG startup getSession, session=' + (session ? session.user.email : 'null'));
     if (!session) return;
     mainMenuOverlayHide();
     await goToProfileOrHub();
