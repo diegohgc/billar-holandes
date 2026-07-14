@@ -454,7 +454,17 @@
 
   populateCountrySelect();
   // if we just came back from the Google OAuth redirect, this resolves the session from the URL
-  sb.auth.getSession();
+  sb.auth.getSession().then(async ({ data: { session } }) => {
+    if (!session) return;
+    mainMenuOverlayHide();
+    const profile = await refreshOnlineUI();
+    if (!profile) {
+      document.getElementById('onlineNameInput').value = '';
+      document.getElementById('onlineProfileScreen').style.display = 'flex';
+    } else {
+      document.getElementById('onlineHubScreen').style.display = 'flex';
+    }
+  });
 
   const canvas = document.getElementById('c');
   const resetBtn = document.getElementById('resetBtn');
