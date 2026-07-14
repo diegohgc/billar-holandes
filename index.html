@@ -1683,6 +1683,9 @@
       aimStarted = true; // once grabbed, switch to the shorter aiming countdown for good
       dragStartBoard = { x: puck.x, y: puck.y };
       dragCurBoard = p;
+      // the dotted aim line is now visible and does the job of the hint text - hide it so
+      // it doesn't clutter the view while the player is actually aiming
+      hintEl.style.display = 'none';
     }
   }
   function pointerMove(clientX, clientY) {
