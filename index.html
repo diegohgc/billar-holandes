@@ -395,6 +395,7 @@
     document.getElementById('onlineHubScreen').style.display = 'flex';
   });
   document.getElementById('onlinePlaySoloBtn').addEventListener('click', () => {
+    console.log('[online] onlinePlaySoloBtn click, currentProfile=', currentProfile, 'currentSession=', currentSession);
     if (!currentProfile) return;
     Sound.ensure();
     isOnlineSoloMatch = true;
@@ -1335,10 +1336,15 @@
     const ranked = players.map(p => ({ name: p.name, isDefaultName: p.isDefaultName, ...computeScore(p.slotCounts) }))
       .sort((a, b) => b.score - a.score);
 
+    console.log('[online] finishGame, isOnlineSoloMatch=', isOnlineSoloMatch, 'currentSession=', currentSession);
     if (isOnlineSoloMatch && currentSession) {
       const r = ranked[0];
+      console.log('[online] inserting solo_matches', { player_id: currentSession.user.id, score: r.score, sets: r.sets });
       sb.from('solo_matches').insert({ player_id: currentSession.user.id, score: r.score, sets: r.sets })
-        .then(({ error }) => { if (error) { console.error('solo_matches insert failed:', error); alert('Error guardando partida online: ' + error.message); } });
+        .then(({ error }) => {
+          if (error) { console.error('[online] solo_matches insert failed:', error); alert('Error guardando partida online: ' + error.message); }
+          else { console.log('[online] solo_matches insert OK'); }
+        });
       isOnlineSoloMatch = false;
     }
 
