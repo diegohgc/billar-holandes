@@ -103,6 +103,10 @@
     color: #2a1a05; font-size: 18px; font-weight: 700;
   }
   .playerCountRow span { font-size: 20px; font-weight: 700; min-width: 24px; text-align: center; }
+  .rankFilterRow { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .rankFilterRow button {
+    flex: 1 1 auto; width: auto; margin-top: 0; padding: 9px 10px; font-size: 13px; white-space: nowrap;
+  }
   #nameInputs input {
     width: 100%; padding: 10px 12px; margin-bottom: 8px; border-radius: 8px;
     border: 1px solid #4a2c0f; background: #150c04; color: #f3e2c0; font-size: 14px;
@@ -208,12 +212,12 @@
 <div id="onlineRankingScreen" class="overlay" style="display:none">
   <div class="panel">
     <h2 data-i18n="leaderboard">Clasificación</h2>
-    <div class="playerCountRow" style="gap:6px; flex-wrap:wrap;">
+    <div class="rankFilterRow">
       <button id="rankScopeGeneral" class="ghostBtn" data-i18n="rankGeneral">General</button>
       <button id="rankScopeMonthly" class="ghostBtn" data-i18n="rankMonthly">Mensual</button>
       <button id="rankScopeYearly" class="ghostBtn" data-i18n="rankYearly">Anual</button>
     </div>
-    <div class="playerCountRow" style="gap:6px; margin-bottom:10px;">
+    <div class="rankFilterRow">
       <button id="rankTypePlayers" class="ghostBtn" data-i18n="rankPlayers">Jugadores</button>
       <button id="rankTypeCountries" class="ghostBtn" data-i18n="rankCountries">Países</button>
     </div>
