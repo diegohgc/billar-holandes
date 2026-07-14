@@ -1337,7 +1337,8 @@
 
     if (isOnlineSoloMatch && currentSession) {
       const r = ranked[0];
-      sb.from('solo_matches').insert({ player_id: currentSession.user.id, score: r.score, sets: r.sets });
+      sb.from('solo_matches').insert({ player_id: currentSession.user.id, score: r.score, sets: r.sets })
+        .then(({ error }) => { if (error) { console.error('solo_matches insert failed:', error); alert('Error guardando partida online: ' + error.message); } });
       isOnlineSoloMatch = false;
     }
 
