@@ -426,6 +426,11 @@
   });
 
   // ---- online rankings ----
+  function countryFlag(code) {
+    if (!code || code.length !== 2) return '';
+    const A = 0x1F1E6;
+    return String.fromCodePoint(...[...code.toUpperCase()].map(c => A + c.charCodeAt(0) - 65));
+  }
   let rankScope = 'general', rankType = 'players';
   function rankViewName() {
     const base = rankType === 'players' ? 'ranking' : 'ranking_countries';
@@ -446,7 +451,7 @@
       const row_ = document.createElement('div');
       row_.className = 'scoreRow';
       const label = rankType === 'players' ? row.name : row.country;
-      row_.innerHTML = `<span class="name">${t('rank', { n: i + 1 })} ${label}</span><span>${t('ptsShort', { n: row.avg_score })}</span>`;
+      row_.innerHTML = `<span class="name">${t('rank', { n: i + 1 })} ${countryFlag(row.country)} ${label}</span><span>${t('ptsShort', { n: row.avg_score })}</span>`;
       listEl.appendChild(row_);
     });
   }
