@@ -323,6 +323,8 @@
   ];
 
   let currentSession = null;
+  let currentProfile = null;
+  let isOnlineSoloMatch = false;
 
   function populateCountrySelect() {
     const sel = document.getElementById('onlineCountrySelect');
@@ -348,6 +350,7 @@
       document.getElementById('onlineHubGreeting').textContent =
         `${profile.name} (${profile.country})`;
     }
+    currentProfile = profile;
     return profile;
   }
 
@@ -390,6 +393,23 @@
     await refreshOnlineUI();
     document.getElementById('onlineProfileScreen').style.display = 'none';
     document.getElementById('onlineHubScreen').style.display = 'flex';
+  });
+  document.getElementById('onlinePlaySoloBtn').addEventListener('click', () => {
+    if (!currentProfile) return;
+    Sound.ensure();
+    isOnlineSoloMatch = true;
+    document.getElementById('onlineHubScreen').style.display = 'none';
+    players = [{
+      name: currentProfile.name,
+      isDefaultName: false,
+      slotCounts: [0, 0, 0, 0],
+      cycleLit: [false, false, false, false],
+      remaining: DISCS_PER_PLAYER,
+    }];
+    curRound = 1;
+    curPlayerIdx = 0;
+    gamePhase = 'playing';
+    startPlayerTurn();
   });
   document.getElementById('onlineHubBackBtn').addEventListener('click', () => {
     document.getElementById('onlineHubScreen').style.display = 'none';
@@ -1314,6 +1334,13 @@
     boardPucks = [];
     const ranked = players.map(p => ({ name: p.name, isDefaultName: p.isDefaultName, ...computeScore(p.slotCounts) }))
       .sort((a, b) => b.score - a.score);
+
+    if (isOnlineSoloMatch && currentSession) {
+      const r = ranked[0];
+      sb.from('solo_matches').insert({ player_id: currentSession.user.id, score: r.score, sets: r.sets });
+      isOnlineSoloMatch = false;
+    }
+
     resultsListEl.innerHTML = '';
     ranked.forEach((r, i) => {
       const row = document.createElement('div');
