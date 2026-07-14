@@ -46,9 +46,9 @@ create policy "Cada usuario registra sus propias partidas"
 -- Sin políticas de update/delete a propósito: el historial de partidas es inmutable,
 -- nadie (ni el propio jugador) puede editar o borrar una partida ya jugada.
 
--- ---- Ranking global: media de las ultimas 20 partidas, minimo 10 jugadas para aparecer ----
--- (evita que el "grinding" total o una unica partida de suerte determinen el ranking)
-create view public.ranking as
+-- ---- Ranking global: media de las ultimas 20 partidas, minimo 2 jugadas para aparecer ----
+-- (minimo bajado a 2 temporalmente para poder probar con pocos datos; subir para produccion)
+create or replace view public.ranking as
 select
   p.id as player_id,
   p.name,
@@ -64,11 +64,11 @@ join lateral (
   limit 20
 ) m on true
 group by p.id, p.name, p.country
-having count(m.score) >= 10
+having count(m.score) >= 2
 order by avg_score desc;
 
 -- ---- Ranking mensual y anual de jugadores (media de TODAS las partidas del periodo) ----
-create view public.ranking_monthly as
+create or replace view public.ranking_monthly as
 select
   p.id as player_id, p.name, p.country,
   round(avg(m.score)) as avg_score,
@@ -79,10 +79,10 @@ join lateral (
   where sm.player_id = p.id and sm.played_at >= date_trunc('month', now())
 ) m on true
 group by p.id, p.name, p.country
-having count(m.score) >= 5
+having count(m.score) >= 2
 order by avg_score desc;
 
-create view public.ranking_yearly as
+create or replace view public.ranking_yearly as
 select
   p.id as player_id, p.name, p.country,
   round(avg(m.score)) as avg_score,
@@ -93,30 +93,29 @@ join lateral (
   where sm.player_id = p.id and sm.played_at >= date_trunc('year', now())
 ) m on true
 group by p.id, p.name, p.country
-having count(m.score) >= 10
+having count(m.score) >= 2
 order by avg_score desc;
 
 -- ---- Ranking de paises: cada jugador "juega para si mismo y para su pais" a la vez -----
 -- la puntuacion de un pais es la media de los rankings individuales de sus jugadores.
--- Minimo 3 jugadores representando para que un pais aparezca (evita que un solo jugador
--- ponga a su pais en primera posicion).
-create view public.ranking_countries as
+-- Minimo bajado a 2 jugadores representando (temporal, para probar con pocos datos).
+create or replace view public.ranking_countries as
 select country, round(avg(avg_score)) as avg_score, count(*) as players_count
 from public.ranking
 group by country
-having count(*) >= 3
+having count(*) >= 2
 order by avg_score desc;
 
-create view public.ranking_countries_monthly as
+create or replace view public.ranking_countries_monthly as
 select country, round(avg(avg_score)) as avg_score, count(*) as players_count
 from public.ranking_monthly
 group by country
-having count(*) >= 3
+having count(*) >= 2
 order by avg_score desc;
 
-create view public.ranking_countries_yearly as
+create or replace view public.ranking_countries_yearly as
 select country, round(avg(avg_score)) as avg_score, count(*) as players_count
 from public.ranking_yearly
 group by country
-having count(*) >= 3
+having count(*) >= 2
 order by avg_score desc;
