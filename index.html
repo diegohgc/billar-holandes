@@ -421,14 +421,15 @@
     document.getElementById('onlineLoginScreen').style.display = 'none';
     backToMainMenu();
   });
-  // dentro del WebView de la app Android (cargada con ?app=android) el login de Google no puede
-  // volver a la propia URL http porque ese salto lo intercepta el WebView para abrir el navegador
-  // externo; en su lugar usamos un esquema propio que la app declara en su AndroidManifest y que
-  // el sistema operativo redirige de vuelta a MainActivity con el token en la URL.
+  // dentro del WebView de la app Android (cargada con ?app=android) el login de Google se hace en
+  // Chrome Custom Tabs; el regreso usa un App Link verificado (diegohgc.github.io/.well-known/
+  // assetlinks.json) en vez de un esquema propio (puckslide://), porque Chrome bloquea el redirect
+  // final a esquemas personalizados cuando no ha habido ningun toque del usuario en esa pestaña
+  // (login instantaneo con cuenta ya recordada); a un enlace https verificado si lo deja.
   const isAndroidApp = new URLSearchParams(window.location.search).get('app') === 'android';
   if (isAndroidApp) console.log('DEBUG URL: ' + window.location.href);
   document.getElementById('onlineGoogleLoginBtn').addEventListener('click', async () => {
-    const redirectTo = isAndroidApp ? 'puckslide://auth-callback' : window.location.href;
+    const redirectTo = isAndroidApp ? 'https://diegohgc.github.io/billar-holandes/auth-callback' : window.location.href;
     console.log('DEBUG signInWithOAuth click, redirectTo=' + redirectTo);
     const res = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } });
     console.log('DEBUG signInWithOAuth result: ' + JSON.stringify(res));
