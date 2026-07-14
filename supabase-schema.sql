@@ -46,8 +46,11 @@ create policy "Cada usuario registra sus propias partidas"
 -- Sin políticas de update/delete a propósito: el historial de partidas es inmutable,
 -- nadie (ni el propio jugador) puede editar o borrar una partida ya jugada.
 
--- ---- Ranking global: media de las ultimas 20 partidas, minimo 2 jugadas para aparecer ----
+-- ---- Ranking global: media de las ultimas 50 partidas, minimo 2 jugadas para aparecer ----
 -- (minimo bajado a 2 temporalmente para poder probar con pocos datos; subir para produccion)
+-- Regla anti-"acampar": si no has jugado ninguna partida en los ultimos 7 dias, desapareces
+-- del ranking hasta que vuelvas a jugar (no se te resta puntuacion, solo dejas de aparecer).
+-- Asi nadie puede quedarse quieto con una buena media sin arriesgarse a seguir jugando.
 create or replace view public.ranking as
 select
   p.id as player_id,
@@ -57,17 +60,18 @@ select
   count(m.score) as matches_played
 from public.profiles p
 join lateral (
-  select score
+  select score, played_at
   from public.solo_matches sm
   where sm.player_id = p.id
   order by sm.played_at desc
-  limit 20
+  limit 50
 ) m on true
 group by p.id, p.name, p.country
-having count(m.score) >= 2
+having count(m.score) >= 2 and max(m.played_at) >= now() - interval '7 days'
 order by avg_score desc;
 
 -- ---- Ranking mensual y anual de jugadores (media de TODAS las partidas del periodo) ----
+-- misma regla de los 7 dias de inactividad que el ranking general.
 create or replace view public.ranking_monthly as
 select
   p.id as player_id, p.name, p.country,
@@ -75,11 +79,11 @@ select
   count(m.score) as matches_played
 from public.profiles p
 join lateral (
-  select score from public.solo_matches sm
+  select score, played_at from public.solo_matches sm
   where sm.player_id = p.id and sm.played_at >= date_trunc('month', now())
 ) m on true
 group by p.id, p.name, p.country
-having count(m.score) >= 2
+having count(m.score) >= 2 and max(m.played_at) >= now() - interval '7 days'
 order by avg_score desc;
 
 create or replace view public.ranking_yearly as
@@ -89,11 +93,11 @@ select
   count(m.score) as matches_played
 from public.profiles p
 join lateral (
-  select score from public.solo_matches sm
+  select score, played_at from public.solo_matches sm
   where sm.player_id = p.id and sm.played_at >= date_trunc('year', now())
 ) m on true
 group by p.id, p.name, p.country
-having count(m.score) >= 2
+having count(m.score) >= 2 and max(m.played_at) >= now() - interval '7 days'
 order by avg_score desc;
 
 -- ---- Ranking de paises: cada jugador "juega para si mismo y para su pais" a la vez -----
