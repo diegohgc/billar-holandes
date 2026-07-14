@@ -1382,58 +1382,67 @@
     const ranked = players.map(p => ({ name: p.name, isDefaultName: p.isDefaultName, ...computeScore(p.slotCounts) }))
       .sort((a, b) => b.score - a.score);
 
+    const wasOnlineMatch = isOnlineSoloMatch;
     if (isOnlineSoloMatch && currentSession) {
       const r = ranked[0];
       sb.from('solo_matches').insert({ player_id: currentSession.user.id, score: r.score, sets: r.sets })
         .then(({ error }) => { if (error) { console.error('solo_matches insert failed:', error); alert('Error guardando partida online: ' + error.message); } });
       isOnlineSoloMatch = false;
     }
+    // el "record global del dispositivo" es un marcador local (localStorage, sin banderas ni
+    // conexion con Supabase) pensado para el modo local; en una partida online no pinta nada,
+    // ahi ya se guarda el resultado en la nube y se consulta en "Clasificacion"
+    document.getElementById('globalRecordBox').style.display = wasOnlineMatch ? 'none' : 'block';
 
     resultsListEl.innerHTML = '';
+    const flagPrefix = (wasOnlineMatch && currentProfile) ? countryFlag(currentProfile.country) + ' ' : '';
     ranked.forEach((r, i) => {
       const row = document.createElement('div');
       row.className = 'resultRow' + (i === 0 ? ' winner' : '');
       const crown = i === 0 ? '🏆 ' : '';
-      row.innerHTML = `<span class="rank">${t('rank', { n: i + 1 })}</span><span class="name">${crown}${r.name} <span style="color:#f3e2c0aa;font-size:12px;">(${t('sets', { n: r.sets })})</span></span><span class="pts">${r.score}</span>`;
+      row.innerHTML = `<span class="rank">${t('rank', { n: i + 1 })}</span><span class="name">${crown}${flagPrefix}${r.name} <span style="color:#f3e2c0aa;font-size:12px;">(${t('sets', { n: r.sets })})</span></span><span class="pts">${r.score}</span>`;
       resultsListEl.appendChild(row);
     });
 
     // update every match participant's all-time best (by name), then show the device's
     // top 3 plus, for anyone from this match who didn't make the podium, their exact rank
-    const records = loadGlobalRecords();
-    const newRecordNames = new Set();
-    ranked.forEach(r => {
-      if (r.isDefaultName) return; // "Jugador N" placeholders never count toward the global record
-      if (upsertGlobalRecord(records, r.name, r.score, r.sets)) newRecordNames.add(r.name);
-    });
-    records.sort((a, b) => b.score - a.score);
-    saveGlobalRecords(records);
+    // (solo tiene sentido en modo local: en online el resultado ya se guarda en Supabase)
+    if (!wasOnlineMatch) {
+      const records = loadGlobalRecords();
+      const newRecordNames = new Set();
+      ranked.forEach(r => {
+        if (r.isDefaultName) return; // "Jugador N" placeholders never count toward the global record
+        if (upsertGlobalRecord(records, r.name, r.score, r.sets)) newRecordNames.add(r.name);
+      });
+      records.sort((a, b) => b.score - a.score);
+      saveGlobalRecords(records);
 
-    const top3ListEl = document.getElementById('globalTop3List');
-    top3ListEl.innerHTML = '';
-    records.slice(0, 3).forEach((rec, i) => {
-      const row = document.createElement('div');
-      row.className = 'scoreRow';
-      const crown = newRecordNames.has(rec.name) ? '🏆 ' : '';
-      row.innerHTML = `<span class="name">${t('rank', { n: i + 1 })}</span><span class="detail">${crown}${rec.name}</span><span>${t('ptsShort', { n: rec.score })}</span>`;
-      top3ListEl.appendChild(row);
-    });
-
-    const rankListEl = document.getElementById('globalRankList');
-    rankListEl.innerHTML = '';
-    const seenNames = new Set();
-    ranked.forEach(r => {
-      if (r.isDefaultName || seenNames.has(r.name)) return;
-      seenNames.add(r.name);
-      const rankIdx = records.findIndex(rec => rec.name === r.name);
-      if (rankIdx >= 3) {
+      const top3ListEl = document.getElementById('globalTop3List');
+      top3ListEl.innerHTML = '';
+      records.slice(0, 3).forEach((rec, i) => {
         const row = document.createElement('div');
         row.className = 'scoreRow';
-        const crown = newRecordNames.has(r.name) ? '🏆 ' : '';
-        row.innerHTML = `<span class="name">${crown}${r.name}</span><span class="detail">${t('rank', { n: rankIdx + 1 })}</span><span>${t('ptsShort', { n: records[rankIdx].score })}</span>`;
-        rankListEl.appendChild(row);
-      }
-    });
+        const crown = newRecordNames.has(rec.name) ? '🏆 ' : '';
+        row.innerHTML = `<span class="name">${t('rank', { n: i + 1 })}</span><span class="detail">${crown}${rec.name}</span><span>${t('ptsShort', { n: rec.score })}</span>`;
+        top3ListEl.appendChild(row);
+      });
+
+      const rankListEl = document.getElementById('globalRankList');
+      rankListEl.innerHTML = '';
+      const seenNames = new Set();
+      ranked.forEach(r => {
+        if (r.isDefaultName || seenNames.has(r.name)) return;
+        seenNames.add(r.name);
+        const rankIdx = records.findIndex(rec => rec.name === r.name);
+        if (rankIdx >= 3) {
+          const row = document.createElement('div');
+          row.className = 'scoreRow';
+          const crown = newRecordNames.has(r.name) ? '🏆 ' : '';
+          row.innerHTML = `<span class="name">${crown}${r.name}</span><span class="detail">${t('rank', { n: rankIdx + 1 })}</span><span>${t('ptsShort', { n: records[rankIdx].score })}</span>`;
+          rankListEl.appendChild(row);
+        }
+      });
+    }
 
     resultsScreenEl.style.display = 'flex';
   }
