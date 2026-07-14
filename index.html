@@ -380,10 +380,15 @@
     document.getElementById('onlineLoginScreen').style.display = 'none';
     backToMainMenu();
   });
+  // dentro del WebView de la app Android (cargada con ?app=android) el login de Google no puede
+  // volver a la propia URL http porque ese salto lo intercepta el WebView para abrir el navegador
+  // externo; en su lugar usamos un esquema propio que la app declara en su AndroidManifest y que
+  // el sistema operativo redirige de vuelta a MainActivity con el token en la URL.
+  const isAndroidApp = new URLSearchParams(window.location.search).get('app') === 'android';
   document.getElementById('onlineGoogleLoginBtn').addEventListener('click', async () => {
     await sb.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.href }
+      options: { redirectTo: isAndroidApp ? 'puckslide://auth-callback' : window.location.href }
     });
   });
   document.getElementById('onlineSaveProfileBtn').addEventListener('click', async () => {
