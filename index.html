@@ -1471,11 +1471,9 @@
   crossbar.position.set(0, 0, 0);
   crossbar.castShadow = true; crossbar.receiveShadow = true;
   scene.add(crossbar);
-  for (let i = -3; i <= 3; i++) {
-    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.8, 12, 12), new THREE.MeshStandardMaterial({ color: 0x8a5a2e }));
-    dot.position.set(i * (bottomHalf / 3.5), 1.6, 0);
-    scene.add(dot);
-  }
+  // note: this bar deliberately has no dots/marks on it - evenly spaced marks would give
+  // players a fixed aiming reference to always launch from the same spot, which defeats
+  // the skill/consistency challenge the game is meant to have
 
   // turned-wood look for the disc faces: concentric growth rings + faint radial grain,
   // so the top of each disc reads as a real wooden puck instead of a flat plastic cap
