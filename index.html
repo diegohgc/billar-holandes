@@ -332,6 +332,13 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 (function () {
+  // si volvemos de auth-bridge.html (login de Google en la app Android), el token viaja como
+  // query param en vez de fragmento (un intent:// no admite '#' en la parte previa a "#Intent");
+  // lo recolocamos como fragmento real ANTES de que supabase-js compruebe la sesion en la URL.
+  const _authFragmentParam = new URLSearchParams(window.location.search).get('authFragment');
+  if (_authFragmentParam) {
+    history.replaceState(null, '', window.location.pathname + window.location.search + '#' + decodeURIComponent(_authFragmentParam));
+  }
   // ================= Online (Supabase): auth + profile + rankings =================
   const SUPABASE_URL = 'https://rstogwbfenxmktitejco.supabase.co';
   const SUPABASE_ANON_KEY = 'sb_publishable_dy6Tdy2laTow4MQQjaNYdg_JxPn2sUK';
@@ -429,7 +436,7 @@
   const isAndroidApp = new URLSearchParams(window.location.search).get('app') === 'android';
   if (isAndroidApp) console.log('DEBUG URL: ' + window.location.href);
   document.getElementById('onlineGoogleLoginBtn').addEventListener('click', async () => {
-    const redirectTo = isAndroidApp ? 'https://diegohgc.github.io/billar-holandes/auth-callback' : window.location.href;
+    const redirectTo = isAndroidApp ? 'https://diegohgc.github.io/billar-holandes/auth-bridge.html' : window.location.href;
     console.log('DEBUG signInWithOAuth click, redirectTo=' + redirectTo);
     const res = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } });
     console.log('DEBUG signInWithOAuth result: ' + JSON.stringify(res));
