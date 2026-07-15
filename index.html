@@ -444,18 +444,14 @@
     el.textContent = msg;
     el.style.display = 'block';
   }
-  window.__markerA = 'reached before getElementById';
   const togglePasswordBtn = document.getElementById('togglePasswordBtn');
-  window.__markerB = togglePasswordBtn ? 'found element' : 'NULL element';
   togglePasswordBtn.textContent = t('showPassword');
-  window.__markerC = 'set textContent OK';
-  togglePasswordBtn.onclick = function () {
+  togglePasswordBtn.addEventListener('click', () => {
     const input = document.getElementById('onlinePasswordInput');
     const showing = input.type === 'text';
     input.type = showing ? 'password' : 'text';
     togglePasswordBtn.textContent = showing ? t('showPassword') : t('hidePassword');
-  };
-  window.__markerD = 'set onclick OK, typeof=' + typeof togglePasswordBtn.onclick;
+  });
   document.getElementById('onlineEmailLoginBtn').addEventListener('click', async () => {
     const email = document.getElementById('onlineEmailInput').value.trim();
     const password = document.getElementById('onlinePasswordInput').value;
