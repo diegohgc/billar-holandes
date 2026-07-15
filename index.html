@@ -446,12 +446,12 @@
   }
   const togglePasswordBtn = document.getElementById('togglePasswordBtn');
   togglePasswordBtn.textContent = t('showPassword');
-  togglePasswordBtn.addEventListener('click', () => {
+  togglePasswordBtn.onclick = function () {
     const input = document.getElementById('onlinePasswordInput');
     const showing = input.type === 'text';
     input.type = showing ? 'password' : 'text';
     togglePasswordBtn.textContent = showing ? t('showPassword') : t('hidePassword');
-  });
+  };
   document.getElementById('onlineEmailLoginBtn').addEventListener('click', async () => {
     const email = document.getElementById('onlineEmailInput').value.trim();
     const password = document.getElementById('onlinePasswordInput').value;
