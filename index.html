@@ -194,7 +194,7 @@
     <input id="onlineEmailInput" type="email" autocomplete="email" placeholder="tu@email.com">
     <div style="position:relative; margin-top:8px;">
       <input id="onlinePasswordInput" type="password" autocomplete="current-password" placeholder="••••••••" style="padding-right:44px;">
-      <button id="togglePasswordBtn" type="button" style="position:absolute; right:4px; top:50%; transform:translateY(-50%); background:none; border:none; color:#f3e2c0aa; font-size:12px; padding:6px 8px; cursor:pointer;">Ver</button>
+      <button id="togglePasswordBtn" type="button" data-i18n="showPassword" style="position:absolute; right:4px; top:50%; transform:translateY(-50%); background:none; border:none; color:#f3e2c0aa; font-size:12px; padding:6px 8px; cursor:pointer;">Ver</button>
     </div>
     <button id="onlineEmailLoginBtn" class="ghostBtn" data-i18n="loginEmail">Ya tengo cuenta: iniciar sesión</button>
     <button id="onlineEmailSignupBtn" class="ghostBtn" data-i18n="signupEmail">Soy nuevo: crear cuenta</button>
@@ -445,7 +445,6 @@
     el.style.display = 'block';
   }
   const togglePasswordBtn = document.getElementById('togglePasswordBtn');
-  togglePasswordBtn.textContent = t('showPassword');
   togglePasswordBtn.addEventListener('click', () => {
     const input = document.getElementById('onlinePasswordInput');
     const showing = input.type === 'text';
