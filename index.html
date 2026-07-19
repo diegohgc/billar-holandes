@@ -477,7 +477,7 @@
   const isAndroidApp = new URLSearchParams(window.location.search).get('app') === 'android';
   document.getElementById('onlineGoogleLoginBtn').addEventListener('click', async () => {
     const redirectTo = isAndroidApp ? 'https://diegohgc.github.io/billar-holandes/auth-bridge.html' : window.location.href;
-    await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } });
+    await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo, queryParams: { prompt: 'select_account' } } });
   });
   function showOnlineLoginError(msg, color) {
     const el = document.getElementById('onlineLoginError');
