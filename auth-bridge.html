@@ -4,16 +4,29 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PuckSlide</title>
+  <style>
+    body { background:#150c04; color:#f3e2c0; font-family:sans-serif; text-align:center; padding-top:60px; margin:0; }
+    a.btn {
+      display:inline-block; margin-top:24px; padding:16px 32px; border-radius:12px;
+      background:#c98a2e; color:#2a1a05; font-weight:700; font-size:17px; text-decoration:none;
+    }
+  </style>
 </head>
-<body style="background:#150c04;color:#f3e2c0;font-family:sans-serif;text-align:center;padding-top:40px;">
-  <p>Volviendo a PuckSlide…</p>
+<body>
+  <p id="msg">Sesión iniciada.</p>
+  <a class="btn" id="returnBtn" href="#">Volver a PuckSlide</a>
   <script>
+    // Chrome bloquea el salto automatico hacia la app (via intent:// o esquema propio) cuando la
+    // navegacion no viene de un toque real del usuario en esta pestaña - pasa sobre todo cuando el
+    // login de Google es instantaneo (cuenta ya recordada, cero toques). Por eso, en vez de
+    // redirigir solo con JS, el usuario pulsa un boton real: eso cuenta como "user gesture" y el
+    // salto a la app SI funciona de forma fiable.
     var fragment = window.location.hash.substring(1);
     var gamePath = '/billar-holandes/?app=android&authFragment=' + encodeURIComponent(fragment);
     var fallback = 'https://diegohgc.github.io' + gamePath;
     var intentUrl = 'intent://diegohgc.github.io' + gamePath +
       '#Intent;scheme=https;package=com.diegohgc.billarholandes;S.browser_fallback_url=' + encodeURIComponent(fallback) + ';end';
-    window.location.replace(intentUrl);
+    document.getElementById('returnBtn').href = intentUrl;
   </script>
 </body>
 </html>
