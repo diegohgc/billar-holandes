@@ -102,24 +102,26 @@ order by avg_score desc;
 
 -- ---- Ranking de paises: cada jugador "juega para si mismo y para su pais" a la vez -----
 -- la puntuacion de un pais es la media de los rankings individuales de sus jugadores.
--- Minimo bajado a 2 jugadores representando (temporal, para probar con pocos datos).
+-- Minimo de 1 jugador para aparecer (decidido por el usuario 2026-07-19, fase de crecimiento
+-- con pocos jugadores por pais; ojo, con 1 solo jugador el pais queda representado unicamente
+-- por su resultado individual, subir este minimo mas adelante si hace falta).
 create or replace view public.ranking_countries as
 select country, round(avg(avg_score)) as avg_score, count(*) as players_count
 from public.ranking
 group by country
-having count(*) >= 2
+having count(*) >= 1
 order by avg_score desc;
 
 create or replace view public.ranking_countries_monthly as
 select country, round(avg(avg_score)) as avg_score, count(*) as players_count
 from public.ranking_monthly
 group by country
-having count(*) >= 2
+having count(*) >= 1
 order by avg_score desc;
 
 create or replace view public.ranking_countries_yearly as
 select country, round(avg(avg_score)) as avg_score, count(*) as players_count
 from public.ranking_yearly
 group by country
-having count(*) >= 2
+having count(*) >= 1
 order by avg_score desc;
