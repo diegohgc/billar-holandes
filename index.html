@@ -570,7 +570,6 @@
       name: currentProfile.name,
       isDefaultName: false,
       slotCounts: [0, 0, 0, 0],
-      cycleLit: [false, false, false, false],
       remaining: DISCS_PER_PLAYER,
     }];
     curRound = 1;
@@ -1324,7 +1323,6 @@
       name: (inp.value.trim() || t('player', { n: i + 1 })),
       isDefaultName: !inp.value.trim(),
       slotCounts: [0, 0, 0, 0],
-      cycleLit: [false, false, false, false],
       remaining: DISCS_PER_PLAYER,
     }));
     curRound = 1;
@@ -1384,9 +1382,11 @@
     refreshHud();
   }
 
-  // pocket floors mirror each player's progress toward their next SET: white = empty this
-  // cycle, yellow = already landed a disc this cycle. Called whenever the active player or
-  // their scored slots change, so the boards always reflect whoever is currently throwing.
+  // pocket floors mirror each player's progress toward their next SET: white = no disc yet
+  // counting toward it, yellow = a disc already landed there counts toward it (this carries
+  // over any leftover from a pocket that had extra discs when the last SET completed, since
+  // that extra one already counts toward the next SET too). Called whenever the active player
+  // or their scored slots change, so the boards always reflect whoever is currently throwing.
   function refreshPocketColors() {
     if (gamePhase !== 'playing' || !players[curPlayerIdx]) {
       gateFloors.forEach(f => f.material.color.setHex(POCKET_WHITE));
@@ -1395,7 +1395,7 @@
     }
     const p = players[curPlayerIdx];
     gateFloors.forEach((f, i) => {
-      const hex = p.cycleLit[i] ? POCKET_YELLOW : POCKET_WHITE;
+      const hex = p.slotCounts[i] > (p.celebratedSets || 0) ? POCKET_YELLOW : POCKET_WHITE;
       f.material.color.setHex(hex);
       gateLips[i].material.color.setHex(hex);
     });
@@ -1420,10 +1420,8 @@
       flashSet();
       gateFloors.forEach(f => f.material.color.setHex(POCKET_GREEN));
       gateLips.forEach(l => l.material.color.setHex(POCKET_GREEN));
-      p.cycleLit = [false, false, false, false];
       setTimeout(refreshPocketColors, 450);
     } else {
-      p.cycleLit[slotIndex] = true;
       Sound.score();
       Haptics.buzz(20);
       refreshPocketColors();
