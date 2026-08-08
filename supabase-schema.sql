@@ -125,3 +125,64 @@ from public.ranking_yearly
 group by country
 having count(*) >= 1
 order by avg_score desc;
+
+-- ---- Ranking de RECORD: mejor puntuacion de una sola partida ----
+-- A diferencia del ranking de media, aqui se usan TODAS las partidas historicas (sin ventana de
+-- 50 ni regla de inactividad de 7 dias): un record personal no debe "caducar" solo por no jugar
+-- una temporada, es un logro conseguido de una vez.
+create or replace view public.ranking_record as
+select
+  p.id as player_id,
+  p.name,
+  p.country,
+  max(m.score) as record_score,
+  count(m.score) as matches_played
+from public.profiles p
+join public.solo_matches m on m.player_id = p.id
+group by p.id, p.name, p.country
+order by record_score desc;
+
+create or replace view public.ranking_record_monthly as
+select
+  p.id as player_id, p.name, p.country,
+  max(m.score) as record_score,
+  count(m.score) as matches_played
+from public.profiles p
+join public.solo_matches m on m.player_id = p.id and m.played_at >= date_trunc('month', now())
+group by p.id, p.name, p.country
+having count(m.score) >= 1
+order by record_score desc;
+
+create or replace view public.ranking_record_yearly as
+select
+  p.id as player_id, p.name, p.country,
+  max(m.score) as record_score,
+  count(m.score) as matches_played
+from public.profiles p
+join public.solo_matches m on m.player_id = p.id and m.played_at >= date_trunc('year', now())
+group by p.id, p.name, p.country
+having count(m.score) >= 1
+order by record_score desc;
+
+-- ---- Ranking de paises por RECORD: el mejor resultado individual conseguido por cualquiera de
+-- sus jugadores (no una media) ----
+create or replace view public.ranking_countries_record as
+select country, max(record_score) as record_score, count(*) as players_count
+from public.ranking_record
+group by country
+having count(*) >= 1
+order by record_score desc;
+
+create or replace view public.ranking_countries_record_monthly as
+select country, max(record_score) as record_score, count(*) as players_count
+from public.ranking_record_monthly
+group by country
+having count(*) >= 1
+order by record_score desc;
+
+create or replace view public.ranking_countries_record_yearly as
+select country, max(record_score) as record_score, count(*) as players_count
+from public.ranking_record_yearly
+group by country
+having count(*) >= 1
+order by record_score desc;
