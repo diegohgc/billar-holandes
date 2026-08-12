@@ -578,6 +578,9 @@
       name: currentProfile.name,
       isDefaultName: false,
       slotCounts: [0, 0, 0, 0],
+      attemptFilled: [false, false, false, false],
+      score: 0,
+      sets: 0,
       remaining: DISCS_PER_PLAYER,
     }];
     curRound = 1;
@@ -1155,27 +1158,20 @@
   let shotsLeft = 0;
   let gamePhase = 'setup'; // 'setup' | 'playing' | 'finished'
 
-  function computeScore(slotCounts) {
-    const sets = Math.min(...slotCounts);
-    let score = sets * 20;
-    slotCounts.forEach((cnt, i) => { score += (cnt - sets) * SLOT_VALUES[i]; });
-    return { score, sets };
-  }
-
   function refreshHud() {
     if (gamePhase !== 'playing') return;
     const p = players[curPlayerIdx];
     curPlayerNameEl.textContent = p.name;
     roundNumEl.textContent = curRound;
     shotsLeftEl.textContent = shotsLeft;
-    curScoreEl.textContent = computeScore(p.slotCounts).score;
+    curScoreEl.textContent = p.score;
     updateTrayDiscs();
   }
 
   function renderScoreboardList(targetEl, showActive) {
     targetEl.innerHTML = '';
     players.forEach((p, i) => {
-      const { score } = computeScore(p.slotCounts);
+      const score = p.score;
       const row = document.createElement('div');
       row.className = 'scoreRow';
       row.innerHTML = `<span class="name">${p.name}${showActive && i === curPlayerIdx && gamePhase === 'playing' ? '<span class="activeTag">● ' + t('playing') + '</span>' : ''}</span>` +
@@ -1358,6 +1354,9 @@
       name: (inp.value.trim() || t('player', { n: i + 1 })),
       isDefaultName: !inp.value.trim(),
       slotCounts: [0, 0, 0, 0],
+      attemptFilled: [false, false, false, false],
+      score: 0,
+      sets: 0,
       remaining: DISCS_PER_PLAYER,
     }));
     curRound = 1;
@@ -1418,9 +1417,10 @@
   }
 
   // pocket floors mirror each player's progress toward their next SET: white = no disc yet
-  // counting toward it, yellow = a disc already landed there counts toward it (this carries
-  // over any leftover from a pocket that had extra discs when the last SET completed, since
-  // that extra one already counts toward the next SET too). Called whenever the active player
+  // counting toward it, yellow = a disc already landed there counts toward it. Unlike before,
+  // this does NOT carry over leftover discs from a pocket that had extras when the last SET
+  // completed - every SET requires a genuinely fresh disc in each of the 4 goals, so stockpiling
+  // discs in easy goals can't be cashed in for free SETs later. Called whenever the active player
   // or their scored slots change, so the boards always reflect whoever is currently throwing.
   function refreshPocketColors() {
     if (gamePhase !== 'playing' || !players[curPlayerIdx]) {
@@ -1430,7 +1430,7 @@
     }
     const p = players[curPlayerIdx];
     gateFloors.forEach((f, i) => {
-      const hex = p.slotCounts[i] > (p.celebratedSets || 0) ? POCKET_YELLOW : POCKET_WHITE;
+      const hex = p.attemptFilled[i] ? POCKET_YELLOW : POCKET_WHITE;
       f.material.color.setHex(hex);
       gateLips[i].material.color.setHex(hex);
     });
@@ -1438,18 +1438,25 @@
 
   function onDiscScored(slotIndex) {
     const p = players[curPlayerIdx];
-    p.slotCounts[slotIndex]++;
+    p.slotCounts[slotIndex]++; // lifetime count per goal, kept only for the scoreboard's [.,.,.,.] display
 
-    // did this disc complete a brand-new full set (one in every goal)? if so, the SET's flat
-    // 20-point bonus replaces this disc's own face value, so show 20 here instead of the
-    // small individual value - otherwise the floating popups people watch (2, 3, 4...) never
-    // seem to add up to what the big "SET!" banner claims
-    const sets = Math.min(...p.slotCounts);
-    const completesSet = sets > (p.celebratedSets || 0);
-    showScorePopup(slotIndex, completesSet ? 20 : SLOT_VALUES[slotIndex]);
+    // a disc only counts toward the CURRENT set attempt if its goal doesn't already have one
+    // banked for this attempt - a second disc in an already-filled goal just scores its own
+    // face value and can't be saved up to shortcut a future SET
+    let completesSet = false;
+    if (!p.attemptFilled[slotIndex]) {
+      p.attemptFilled[slotIndex] = true;
+      completesSet = p.attemptFilled.every(Boolean);
+    }
+    const gained = completesSet ? 20 : SLOT_VALUES[slotIndex];
+    p.score += gained;
+    showScorePopup(slotIndex, gained);
 
     if (completesSet) {
-      p.celebratedSets = sets;
+      p.sets++;
+      // reset the attempt entirely: no disc already on the board carries over, every future
+      // SET needs 4 brand-new discs, one per goal
+      p.attemptFilled = [false, false, false, false];
       Sound.setDone();
       Haptics.buzz([25, 40, 25]);
       flashSet();
@@ -1495,7 +1502,7 @@
     if (shotFeedbackPending) {
       // the true points earned this shot = how much the player's total actually went up,
       // not the raw sum of pocket values (a SET bonus replaces those with a flat 20)
-      const gained = computeScore(players[curPlayerIdx].slotCounts).score - scoreBeforeShot;
+      const gained = players[curPlayerIdx].score - scoreBeforeShot;
       resetBtn.textContent = gained > 0 ? t('ptsGained', { n: gained }) : t('out');
       resetBtn.style.display = 'block';
       shotFeedbackPending = false;
@@ -1551,7 +1558,7 @@
   }
 
   function showRoundResults(completedRound) {
-    const ranked = players.map(p => ({ name: p.name, ...computeScore(p.slotCounts) }))
+    const ranked = players.map(p => ({ name: p.name, score: p.score, sets: p.sets }))
       .sort((a, b) => b.score - a.score);
     roundResultsTitleEl.textContent = t('roundResults', { round: completedRound });
     roundResultsListEl.innerHTML = '';
@@ -1604,7 +1611,7 @@
     hintEl.style.display = 'none';
     detachBoardMeshes();
     boardPucks = [];
-    const ranked = players.map(p => ({ name: p.name, isDefaultName: p.isDefaultName, ...computeScore(p.slotCounts) }))
+    const ranked = players.map(p => ({ name: p.name, isDefaultName: p.isDefaultName, score: p.score, sets: p.sets }))
       .sort((a, b) => b.score - a.score);
 
     const wasOnlineMatch = isOnlineSoloMatch;
@@ -2226,7 +2233,7 @@
     puck.vy = vy;
     puck.state = 'flying';
     Sound.launch(power);
-    scoreBeforeShot = computeScore(players[curPlayerIdx].slotCounts).score;
+    scoreBeforeShot = players[curPlayerIdx].score;
     shotFeedbackPending = true;
     camTargetPuck = puck; // camera keeps following THIS disc even after the next one spawns
     shotsLeft--;
