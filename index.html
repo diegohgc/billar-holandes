@@ -816,13 +816,27 @@
     }
     function scheduleNextNote() {
       if (!ctx) return;
-      const chord = MUSIC_CHORDS[musicChordIdx % MUSIC_CHORDS.length];
-      const noteFreq = chord[MUSIC_ARPEGGIO_PATTERN[musicStepIdx % MUSIC_ARPEGGIO_PATTERN.length]];
-      playMusicNote(noteFreq);
-      musicStepIdx++;
-      if (musicStepIdx % MUSIC_ARPEGGIO_PATTERN.length === 0) musicChordIdx++;
+      // keep the timer chain alive but skip actually playing notes while the tab/app is in the
+      // background - otherwise the music (and any queued effects) keep running and audibly leak
+      // through even after leaving the page, until the app is force-closed
+      if (!document.hidden) {
+        const chord = MUSIC_CHORDS[musicChordIdx % MUSIC_CHORDS.length];
+        const noteFreq = chord[MUSIC_ARPEGGIO_PATTERN[musicStepIdx % MUSIC_ARPEGGIO_PATTERN.length]];
+        playMusicNote(noteFreq);
+        musicStepIdx++;
+        if (musicStepIdx % MUSIC_ARPEGGIO_PATTERN.length === 0) musicChordIdx++;
+      }
       setTimeout(scheduleNextNote, MUSIC_NOTE_SECONDS * 1000);
     }
+    // belt-and-braces: also fully suspend the audio engine itself when the app is backgrounded
+    // (covers sound effects too, not just the music loop above), and resume it when it comes
+    // back to the foreground - a WebView keeps running JS in the background by default, so
+    // without this the audio just kept going until the app was force-closed
+    document.addEventListener('visibilitychange', () => {
+      if (!ctx) return;
+      if (document.hidden) ctx.suspend();
+      else if (enabled) ctx.resume();
+    });
     function startMusic() {
       if (musicStarted || !ctx) return;
       musicStarted = true;
