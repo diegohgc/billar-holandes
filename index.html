@@ -777,7 +777,59 @@
         try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { ctx = null; }
       }
       if (ctx && ctx.state === 'suspended') ctx.resume();
+      if (ctx) startMusic();
       return ctx;
+    }
+
+    // ---- ambient background music: a soft, slow chord pad that loops forever underneath the
+    // game, kept clearly quieter than the sound effects (effects peak around 0.16-0.5, this
+    // stays around 0.05) so it never competes with them, just fills the silence ----
+    let musicGain = null, musicStarted = false, musicChordIdx = 0;
+    const MUSIC_BASE_GAIN = 0.045;
+    const MUSIC_CHORD_SECONDS = 5;
+    // light, all-major C - G - F - C progression in a brighter register - upbeat and casual
+    // instead of moody, more suited to a fun tabletop game than a dramatic soundtrack
+    const MUSIC_CHORDS = [
+      [261.63, 329.63, 392.00], // C
+      [392.00, 493.88, 587.33], // G
+      [349.23, 440.00, 523.25], // F
+      [261.63, 329.63, 392.00], // C
+    ];
+    function playMusicChord(notes) {
+      const c = ctx; if (!c || !musicGain) return;
+      const now = c.currentTime;
+      const dur = MUSIC_CHORD_SECONDS + 1.2; // slight overlap with the next chord for a smooth crossfade
+      notes.forEach((freq, i) => {
+        const osc = c.createOscillator();
+        osc.type = 'sine'; // softer and airier than triangle, keeps the pad light rather than reedy
+        osc.frequency.value = freq;
+        const filter = c.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 2200 + i * 200;
+        const g = c.createGain();
+        const peak = (1 / notes.length) * 0.85;
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.linearRampToValueAtTime(peak, now + 1.1);
+        g.gain.linearRampToValueAtTime(peak * 0.85, now + dur - 1.4);
+        g.gain.linearRampToValueAtTime(0.0001, now + dur);
+        osc.connect(filter).connect(g).connect(musicGain);
+        osc.start(now);
+        osc.stop(now + dur + 0.1);
+      });
+    }
+    function scheduleNextChord() {
+      if (!ctx) return;
+      playMusicChord(MUSIC_CHORDS[musicChordIdx % MUSIC_CHORDS.length]);
+      musicChordIdx++;
+      setTimeout(scheduleNextChord, MUSIC_CHORD_SECONDS * 1000);
+    }
+    function startMusic() {
+      if (musicStarted || !ctx) return;
+      musicStarted = true;
+      musicGain = ctx.createGain();
+      musicGain.gain.value = enabled ? MUSIC_BASE_GAIN : 0;
+      musicGain.connect(ctx.destination);
+      scheduleNextChord();
     }
     // a short wooden "thock": a damped low body tone plus a filtered noise click,
     // both scaled by the impact strength (0..1)
@@ -877,7 +929,17 @@
     }
     return {
       ensure, knock, score, launch, setDone, setSlide,
-      toggle() { enabled = !enabled; if (enabled) ensure(); else if (slideGain) slideGain.gain.value = 0; return enabled; },
+      toggle() {
+        enabled = !enabled;
+        if (enabled) {
+          ensure();
+          if (musicGain) musicGain.gain.setTargetAtTime(MUSIC_BASE_GAIN, ctx.currentTime, 0.3);
+        } else {
+          if (slideGain) slideGain.gain.value = 0;
+          if (musicGain) musicGain.gain.setTargetAtTime(0, ctx.currentTime, 0.3);
+        }
+        return enabled;
+      },
       isOn() { return enabled; },
     };
   })();
