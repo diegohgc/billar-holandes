@@ -784,44 +784,44 @@
     // ---- ambient background music: a soft, slow chord pad that loops forever underneath the
     // game, kept clearly quieter than the sound effects (effects peak around 0.16-0.5, this
     // stays around 0.05) so it never competes with them, just fills the silence ----
-    let musicGain = null, musicStarted = false, musicChordIdx = 0;
-    const MUSIC_BASE_GAIN = 0.045;
-    const MUSIC_CHORD_SECONDS = 5;
-    // light, all-major C - G - F - C progression in a brighter register - upbeat and casual
-    // instead of moody, more suited to a fun tabletop game than a dramatic soundtrack
+    let musicGain = null, musicStarted = false, musicChordIdx = 0, musicStepIdx = 0;
+    const MUSIC_BASE_GAIN = 0.05;
+    const MUSIC_NOTE_SECONDS = 0.22;
+    const MUSIC_ARPEGGIO_PATTERN = [0, 1, 2, 3, 2, 1]; // little up-down bounce through the chord
+    // a bright, bouncy little marimba-like arpeggio (not a held pad) through the classic
+    // upbeat C - G - Am - F pop progression - playful and cheerful rather than a slow, dramatic
+    // soundtrack. Am is kept in a high, bright register so it still feels light, not moody.
     const MUSIC_CHORDS = [
-      [261.63, 329.63, 392.00], // C
-      [392.00, 493.88, 587.33], // G
-      [349.23, 440.00, 523.25], // F
-      [261.63, 329.63, 392.00], // C
+      [261.63, 329.63, 392.00, 523.25], // C
+      [392.00, 493.88, 587.33, 783.99], // G
+      [440.00, 523.25, 659.26, 880.00], // Am
+      [349.23, 440.00, 523.25, 698.46], // F
     ];
-    function playMusicChord(notes) {
+    function playMusicNote(freq) {
       const c = ctx; if (!c || !musicGain) return;
       const now = c.currentTime;
-      const dur = MUSIC_CHORD_SECONDS + 1.2; // slight overlap with the next chord for a smooth crossfade
-      notes.forEach((freq, i) => {
-        const osc = c.createOscillator();
-        osc.type = 'sine'; // softer and airier than triangle, keeps the pad light rather than reedy
-        osc.frequency.value = freq;
-        const filter = c.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.value = 2200 + i * 200;
-        const g = c.createGain();
-        const peak = (1 / notes.length) * 0.85;
-        g.gain.setValueAtTime(0.0001, now);
-        g.gain.linearRampToValueAtTime(peak, now + 1.1);
-        g.gain.linearRampToValueAtTime(peak * 0.85, now + dur - 1.4);
-        g.gain.linearRampToValueAtTime(0.0001, now + dur);
-        osc.connect(filter).connect(g).connect(musicGain);
-        osc.start(now);
-        osc.stop(now + dur + 0.1);
-      });
+      const osc = c.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      const filter = c.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = 2800;
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.linearRampToValueAtTime(0.24, now + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + MUSIC_NOTE_SECONDS * 1.9);
+      osc.connect(filter).connect(g).connect(musicGain);
+      osc.start(now);
+      osc.stop(now + MUSIC_NOTE_SECONDS * 2);
     }
-    function scheduleNextChord() {
+    function scheduleNextNote() {
       if (!ctx) return;
-      playMusicChord(MUSIC_CHORDS[musicChordIdx % MUSIC_CHORDS.length]);
-      musicChordIdx++;
-      setTimeout(scheduleNextChord, MUSIC_CHORD_SECONDS * 1000);
+      const chord = MUSIC_CHORDS[musicChordIdx % MUSIC_CHORDS.length];
+      const noteFreq = chord[MUSIC_ARPEGGIO_PATTERN[musicStepIdx % MUSIC_ARPEGGIO_PATTERN.length]];
+      playMusicNote(noteFreq);
+      musicStepIdx++;
+      if (musicStepIdx % MUSIC_ARPEGGIO_PATTERN.length === 0) musicChordIdx++;
+      setTimeout(scheduleNextNote, MUSIC_NOTE_SECONDS * 1000);
     }
     function startMusic() {
       if (musicStarted || !ctx) return;
@@ -829,7 +829,7 @@
       musicGain = ctx.createGain();
       musicGain.gain.value = enabled ? MUSIC_BASE_GAIN : 0;
       musicGain.connect(ctx.destination);
-      scheduleNextChord();
+      scheduleNextNote();
     }
     // a short wooden "thock": a damped low body tone plus a filtered noise click,
     // both scaled by the impact strength (0..1)
