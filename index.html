@@ -1627,6 +1627,7 @@
       Sound.setDone();
       Haptics.buzz([25, 40, 25]);
       flashSet();
+      spawnSetConfetti();
       gateFloors.forEach(f => f.material.color.setHex(POCKET_GREEN));
       gateLips.forEach(l => l.material.color.setHex(POCKET_GREEN));
       setTimeout(refreshPocketColors, 450);
@@ -2305,6 +2306,99 @@
   aimBall.visible = false;
   scene.add(aimBall);
 
+  // a soft round glow texture, drawn once on a small canvas - used for both the ambient dust
+  // motes and the confetti burst so neither needs an external image asset
+  function makeGlowTexture(rgb) {
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const cx = c.getContext('2d');
+    const g = cx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, `rgba(${rgb},0.95)`);
+    g.addColorStop(1, `rgba(${rgb},0)`);
+    cx.fillStyle = g; cx.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(c);
+  }
+
+  // ---- ambient dust: a handful of warm, slow-drifting motes scattered around the lane, purely
+  // decorative - fills the dark empty space around the board without ever affecting gameplay ----
+  const DUST_COUNT = 90;
+  const dustTexture = makeGlowTexture('255,225,175');
+  const dustGeo = new THREE.BufferGeometry();
+  const dustPositions = new Float32Array(DUST_COUNT * 3);
+  const dustSpeeds = new Float32Array(DUST_COUNT);
+  const dustSway = new Float32Array(DUST_COUNT);
+  for (let i = 0; i < DUST_COUNT; i++) {
+    dustPositions[i * 3] = (Math.random() - 0.5) * 100;
+    dustPositions[i * 3 + 1] = Math.random() * 60 + 2;
+    dustPositions[i * 3 + 2] = -(Math.random() * (GATE_BACK_Y + 30) + 5);
+    dustSpeeds[i] = 2 + Math.random() * 3;
+    dustSway[i] = Math.random() * Math.PI * 2;
+  }
+  dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
+  const dustMat = new THREE.PointsMaterial({
+    size: 2.4, map: dustTexture, transparent: true, opacity: 0.4,
+    depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true,
+  });
+  const dustPoints = new THREE.Points(dustGeo, dustMat);
+  scene.add(dustPoints);
+  function updateDust(dt) {
+    const pos = dustGeo.attributes.position.array;
+    for (let i = 0; i < DUST_COUNT; i++) {
+      pos[i * 3 + 1] += dustSpeeds[i] * dt; // drift slowly upward
+      dustSway[i] += dt * 0.4;
+      pos[i * 3] += Math.sin(dustSway[i]) * 0.06; // gentle horizontal sway
+      if (pos[i * 3 + 1] > 62) pos[i * 3 + 1] = 2; // wrap back to the bottom
+    }
+    dustGeo.attributes.position.needsUpdate = true;
+  }
+
+  // ---- SET confetti: a little burst of colored flecks over the goals whenever a SET completes,
+  // matching the fanfare sound and green flash - purely cosmetic, cleared automatically ----
+  const CONFETTI_COLORS = [0xf3e2c0, 0xc98a2e, 0xffe07a, 0x88ff88, 0xff8a80, 0xffffff];
+  let confettiParticles = [];
+  function spawnSetConfetti() {
+    const originX = (slots[0][0] + slots[3][1]) / 2;
+    const originY = BOARD.gateHeight ? BOARD.gateHeight * 0.6 : 14;
+    const originZ = -GATE_BACK_Y + 4;
+    for (let i = 0; i < 34; i++) {
+      const geo = new THREE.PlaneGeometry(1.3, 1.8);
+      const mat = new THREE.MeshBasicMaterial({
+        color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+        transparent: true, opacity: 1, side: THREE.DoubleSide,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(originX + (Math.random() - 0.5) * 26, originY + Math.random() * 4, originZ + (Math.random() - 0.5) * 10);
+      mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+      scene.add(mesh);
+      confettiParticles.push({
+        mesh,
+        vx: (Math.random() - 0.5) * 24,
+        vy: 22 + Math.random() * 16,
+        vz: (Math.random() - 0.5) * 14,
+        spinX: (Math.random() - 0.5) * 8,
+        spinY: (Math.random() - 0.5) * 8,
+        life: 0,
+        maxLife: 1.1 + Math.random() * 0.4,
+      });
+    }
+  }
+  function updateConfetti(dt) {
+    if (!confettiParticles.length) return;
+    const GRAVITY = 60;
+    confettiParticles = confettiParticles.filter(c => {
+      c.life += dt;
+      if (c.life >= c.maxLife) { scene.remove(c.mesh); c.mesh.geometry.dispose(); c.mesh.material.dispose(); return false; }
+      c.vy -= GRAVITY * dt;
+      c.mesh.position.x += c.vx * dt;
+      c.mesh.position.y += c.vy * dt;
+      c.mesh.position.z += c.vz * dt;
+      c.mesh.rotation.x += c.spinX * dt;
+      c.mesh.rotation.y += c.spinY * dt;
+      const fadeStart = c.maxLife * 0.6;
+      if (c.life > fadeStart) c.mesh.material.opacity = 1 - (c.life - fadeStart) / (c.maxLife - fadeStart);
+      return true;
+    });
+  }
+
   function resize() {
     const W = window.innerWidth, H = window.innerHeight;
     renderer.setSize(W, H);
@@ -2493,6 +2587,8 @@
     updateShotTimer(dt);
     updateAimVisuals();
     updateCamera(dt);
+    updateDust(dt);
+    updateConfetti(dt);
 
     renderer.render(scene, camera);
     requestAnimationFrame(frame);
