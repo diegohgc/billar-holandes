@@ -3,6 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<!-- pedimos a los navegadores que no guarden esta página en caché - GitHub Pages no nos deja
+     mandar cabeceras HTTP reales (hosting estático), así que esto es lo máximo que podemos
+     forzar desde el propio HTML para quien juega desde un navegador normal en vez de la app.
+     Nota: los jugadores que usan la app de Android no dependen de esto - MainActivity.kt ya
+     fuerza WebSettings.LOAD_NO_CACHE, así que ellos siempre reciben la última versión sola. -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>PuckSlide — Billar Holandés</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -38,8 +46,11 @@
     z-index: 5; text-align: center; pointer-events: none;
     text-shadow: 0 2px 10px rgba(0,0,0,.6);
   }
-  #onlineHudFlag { font-size: 44px; line-height: 1; }
-  #onlineHudName { font-size: 21px; font-weight: 700; color: #f3e2c0; margin-top: 2px; max-width: 26vw; word-break: break-word; }
+  #onlineHudFlag { font-size: 44px; line-height: 1; } /* tamaño fijo siempre, no se encoge nunca */
+  #onlineHudName {
+    font-weight: 700; color: #f3e2c0; margin-top: 2px;
+    width: 26vw; white-space: nowrap; overflow: hidden; /* nunca salta de línea: se encoge en vez de desbordar */
+  }
   #onlineHudScore { font-size: 15px; font-weight: 600; color: #c98a2e; margin-top: 2px; }
   #scoreboardBtn, #soundBtn, #exitBtn {
     pointer-events: auto; margin-top: 4px; padding: 5px 12px; border-radius: 14px;
@@ -1303,10 +1314,24 @@
     if (isOnlineSoloMatch && currentProfile) {
       badge.style.display = 'block';
       document.getElementById('onlineHudFlag').textContent = countryFlag(currentProfile.country);
-      document.getElementById('onlineHudName').textContent = p.name;
+      setOnlineHudName(p.name);
       document.getElementById('onlineHudScore').textContent = t('ptsShort', { n: p.score });
     } else {
       badge.style.display = 'none';
+    }
+  }
+
+  // reduce el tamaño de letra del nombre hasta que quepa en una sola línea sin desbordarse -
+  // nunca hace saltar la línea ni toca el tamaño de la bandera, que siempre queda fijo
+  const ONLINE_HUD_NAME_MAX_SIZE = 21, ONLINE_HUD_NAME_MIN_SIZE = 11;
+  function setOnlineHudName(name) {
+    const el = document.getElementById('onlineHudName');
+    el.textContent = name;
+    let size = ONLINE_HUD_NAME_MAX_SIZE;
+    el.style.fontSize = size + 'px';
+    while (el.scrollWidth > el.clientWidth && size > ONLINE_HUD_NAME_MIN_SIZE) {
+      size -= 1;
+      el.style.fontSize = size + 'px';
     }
   }
 
