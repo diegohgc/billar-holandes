@@ -29,16 +29,18 @@
   }
   #reserve .pip.used { opacity: 0.16; transform: scale(0.7); background: #4a3a22; box-shadow: none; }
   #ui .big { font-size: 20px; font-weight: 700; }
-  /* durante una partida online, rellena el hueco oscuro por encima del tablero con la bandera,
-     el nombre y la puntuación del jugador en grande - solo aparece en modo online */
+  /* durante una partida online, rellena el hueco oscuro a la izquierda del tablero con la
+     bandera, el nombre y la puntuación del jugador en grande - solo aparece en modo online.
+     En el lateral (no en medio) para no tapar nunca el tablero, que queda centrado */
   #onlineHudBadge {
-    position: fixed; top: 27%; left: 50%; transform: translateX(-50%);
+    position: fixed; top: 50%; left: calc(10px + env(safe-area-inset-left));
+    transform: translateY(-50%);
     z-index: 5; text-align: center; pointer-events: none;
     text-shadow: 0 2px 10px rgba(0,0,0,.6);
   }
-  #onlineHudFlag { font-size: 54px; line-height: 1; }
-  #onlineHudName { font-size: 26px; font-weight: 700; color: #f3e2c0; margin-top: 2px; }
-  #onlineHudScore { font-size: 17px; font-weight: 600; color: #c98a2e; margin-top: 2px; }
+  #onlineHudFlag { font-size: 44px; line-height: 1; }
+  #onlineHudName { font-size: 21px; font-weight: 700; color: #f3e2c0; margin-top: 2px; max-width: 26vw; word-break: break-word; }
+  #onlineHudScore { font-size: 15px; font-weight: 600; color: #c98a2e; margin-top: 2px; }
   #scoreboardBtn, #soundBtn, #exitBtn {
     pointer-events: auto; margin-top: 4px; padding: 5px 12px; border-radius: 14px;
     border: 1px solid #c98a2e88; background: rgba(201,138,46,0.18); color: #f3e2c0;
