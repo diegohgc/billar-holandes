@@ -29,6 +29,16 @@
   }
   #reserve .pip.used { opacity: 0.16; transform: scale(0.7); background: #4a3a22; box-shadow: none; }
   #ui .big { font-size: 20px; font-weight: 700; }
+  /* durante una partida online, rellena el hueco oscuro por encima del tablero con la bandera,
+     el nombre y la puntuación del jugador en grande - solo aparece en modo online */
+  #onlineHudBadge {
+    position: fixed; top: 27%; left: 50%; transform: translateX(-50%);
+    z-index: 5; text-align: center; pointer-events: none;
+    text-shadow: 0 2px 10px rgba(0,0,0,.6);
+  }
+  #onlineHudFlag { font-size: 54px; line-height: 1; }
+  #onlineHudName { font-size: 26px; font-weight: 700; color: #f3e2c0; margin-top: 2px; }
+  #onlineHudScore { font-size: 17px; font-weight: 600; color: #c98a2e; margin-top: 2px; }
   #scoreboardBtn, #soundBtn, #exitBtn {
     pointer-events: auto; margin-top: 4px; padding: 5px 12px; border-radius: 14px;
     border: 1px solid #c98a2e88; background: rgba(201,138,46,0.18); color: #f3e2c0;
@@ -156,6 +166,12 @@
     </span>
     <div id="timer">8</div>
   </div>
+</div>
+
+<div id="onlineHudBadge" style="display:none;">
+  <div id="onlineHudFlag"></div>
+  <div id="onlineHudName"></div>
+  <div id="onlineHudScore"></div>
 </div>
 
 <canvas id="c"></canvas>
@@ -1278,6 +1294,18 @@
     shotsLeftEl.textContent = shotsLeft;
     curScoreEl.textContent = p.score;
     updateTrayDiscs();
+
+    // en partida online rellenamos el hueco oscuro por encima del tablero con la bandera,
+    // el nombre y la puntuación del jugador en grande - en local no aplica (no hay país)
+    const badge = document.getElementById('onlineHudBadge');
+    if (isOnlineSoloMatch && currentProfile) {
+      badge.style.display = 'block';
+      document.getElementById('onlineHudFlag').textContent = countryFlag(currentProfile.country);
+      document.getElementById('onlineHudName').textContent = p.name;
+      document.getElementById('onlineHudScore').textContent = t('ptsShort', { n: p.score });
+    } else {
+      badge.style.display = 'none';
+    }
   }
 
   function renderScoreboardList(targetEl, showActive) {
@@ -1721,6 +1749,7 @@
     gamePhase = 'finished';
     resetBtn.style.display = 'none';
     hintEl.style.display = 'none';
+    document.getElementById('onlineHudBadge').style.display = 'none';
     detachBoardMeshes();
     boardPucks = [];
     const ranked = players.map(p => ({ name: p.name, isDefaultName: p.isDefaultName, score: p.score, sets: p.sets }))
