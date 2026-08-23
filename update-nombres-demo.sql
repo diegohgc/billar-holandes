@@ -18,3 +18,11 @@ update public.profiles set name = 'Emily' where name = 'Emily Clarke' and is_dem
 update public.profiles set name = 'Mei' where name = 'Mei Chen' and is_demo = true;
 update public.profiles set name = 'Valentina' where name = 'Valentina Rojas' and is_demo = true;
 update public.profiles set name = 'Lukas' where name = 'Lukas Schneider' and is_demo = true;
+
+-- Tercera tanda: 5 de Sudamerica reasignados a Paises Bajos (nombre + pais), a peticion del
+-- usuario, uno de cada pais (AR/MX/CO/CL/BR) - aplicado 2026-08-22
+update public.profiles set name = 'Bram de Jong', country = 'NL' where name = 'Martín Gómez' and is_demo = true;
+update public.profiles set name = 'Sven van Dijk', country = 'NL' where name = 'Diego Ramírez' and is_demo = true;
+update public.profiles set name = 'Thomas Visser', country = 'NL' where name = 'Andrés Molina' and is_demo = true;
+update public.profiles set name = 'Niels Smit', country = 'NL' where name = 'Sebastián Vidal' and is_demo = true;
+update public.profiles set name = 'Kees Mulder', country = 'NL' where name = 'BEATRIZ SOUZA' and is_demo = true;
