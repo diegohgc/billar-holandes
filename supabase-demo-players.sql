@@ -10,6 +10,10 @@
 -- CÓMO DESHACER ESTO en el futuro (si se quiere quitar):
 --   select cron.unschedule('refresh_demo_players_matches');
 --   delete from public.profiles where is_demo = true;  -- borra en cascada sus solo_matches
+--
+-- Tras el sembrado inicial, se retocaron a mano 10 nombres para que no se noten "de laboratorio"
+-- (algunos sin apellido, en mayusculas, en minusculas o sin tildes) - ver update-nombres-demo.sql
+-- para el detalle exacto de esos 10 cambios.
 
 -- ---- 1) columnas de control + quitar la exigencia de cuenta real de Google ----
 alter table public.profiles
