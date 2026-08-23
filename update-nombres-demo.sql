@@ -26,3 +26,7 @@ update public.profiles set name = 'Sven van Dijk', country = 'NL' where name = '
 update public.profiles set name = 'Thomas Visser', country = 'NL' where name = 'Andrés Molina' and is_demo = true;
 update public.profiles set name = 'Niels Smit', country = 'NL' where name = 'Sebastián Vidal' and is_demo = true;
 update public.profiles set name = 'Kees Mulder', country = 'NL' where name = 'BEATRIZ SOUZA' and is_demo = true;
+
+-- NOTA: al ejecutar el bloque de arriba el usuario simplifico a mano un par de estos nombres
+-- holandeses a solo nombre de pila (ej. "Bram" en vez de "Bram de Jong"), siguiendo el mismo
+-- patron de las tandas anteriores. El pais (NL) y el resto se aplicaron tal cual.
