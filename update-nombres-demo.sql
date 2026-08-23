@@ -11,3 +11,10 @@ update public.profiles set name = 'OLIVER BENNETT' where name = 'Oliver Bennett'
 update public.profiles set name = 'MARCO BIANCHI' where name = 'Marco Bianchi' and is_demo = true;
 update public.profiles set name = 'BEATRIZ SOUZA' where name = 'Beatriz Souza' and is_demo = true;
 update public.profiles set name = 'Sofia Martinez' where name = 'Sofía Martínez' and is_demo = true;
+
+-- Segunda tanda (misma idea, 5 mas solo con nombre de pila): aplicado 2026-08-22
+update public.profiles set name = 'Lucas' where name = 'Lucas Oliveira' and is_demo = true;
+update public.profiles set name = 'Emily' where name = 'Emily Clarke' and is_demo = true;
+update public.profiles set name = 'Mei' where name = 'Mei Chen' and is_demo = true;
+update public.profiles set name = 'Valentina' where name = 'Valentina Rojas' and is_demo = true;
+update public.profiles set name = 'Lukas' where name = 'Lukas Schneider' and is_demo = true;
