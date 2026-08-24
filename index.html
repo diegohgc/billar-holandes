@@ -1352,7 +1352,7 @@
       const row = document.createElement('div');
       row.className = 'scoreRow';
       row.innerHTML = `<span class="name">${p.name}${showActive && i === curPlayerIdx && gamePhase === 'playing' ? '<span class="activeTag">● ' + t('playing') + '</span>' : ''}</span>` +
-        `<span class="detail">[${p.slotCounts.join(', ')}]</span><span>${t('ptsShort', { n: score })}</span>`;
+        `<span class="detail">${t('sets', { n: p.sets })}</span><span>${t('ptsShort', { n: score })}</span>`;
       targetEl.appendChild(row);
     });
   }
