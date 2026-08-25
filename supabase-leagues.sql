@@ -14,9 +14,10 @@
 -- gente ha jugado esa semana (objetivo ~15 jugadores por division), sin tope maximo. Si la
 -- base de jugadores crece mucho, saldran mas divisiones solas, sin tocar nada aqui.
 --
--- Puntuacion semanal: SUMA de las puntuaciones de esta semana (no la media) - premia jugar
--- mas, que es justo el objetivo de esto (enganchar), a diferencia de la clasificacion de
--- media de siempre que no premia el volumen de partidas.
+-- Puntuacion semanal: MEDIA de las partidas de esta semana (no la suma) - cambiado el
+-- 2026-08-25 porque con la suma ganaba siempre quien mas jugaba, no quien mejor jugaba. Con la
+-- media, lo que engancha es que cada semana vuelves a competir "en igualdad" contra gente de tu
+-- mismo nivel actual (a diferencia de la clasificacion general de siempre, que es historica).
 --
 -- Aplicado 2026-08-25.
 
@@ -30,7 +31,7 @@ select
   p.name,
   p.country,
   p.league_division,
-  coalesce(sum(m.score), 0) as week_score,
+  coalesce(round(avg(m.score)), 0) as week_score,
   count(m.score) as matches_played
 from public.profiles p
 left join public.solo_matches m
