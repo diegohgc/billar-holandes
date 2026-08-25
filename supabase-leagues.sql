@@ -19,6 +19,11 @@
 -- media, lo que engancha es que cada semana vuelves a competir "en igualdad" contra gente de tu
 -- mismo nivel actual (a diferencia de la clasificacion general de siempre, que es historica).
 --
+-- MINIMO 2 partidas esa semana para que la puntuacion cuente (si no, marca 0) - añadido el
+-- 2026-08-25 porque con la media pura, jugar 1 partida muy buena y no volver a arriesgarse
+-- garantizaba una media perfecta sin mas esfuerzo. El juego avisa al jugador en pantalla tras su
+-- primera partida de la semana para que sepa que necesita jugar otra.
+--
 -- Aplicado 2026-08-25.
 
 -- ---- 1) columna de division (1 = la mejor, numeros mas altos = divisiones mas bajas) ----
@@ -31,7 +36,7 @@ select
   p.name,
   p.country,
   p.league_division,
-  coalesce(round(avg(m.score)), 0) as week_score,
+  case when count(m.score) >= 2 then coalesce(round(avg(m.score)), 0) else 0 end as week_score,
   count(m.score) as matches_played
 from public.profiles p
 left join public.solo_matches m
@@ -81,7 +86,7 @@ begin
   update public.profiles set league_division = max_division where league_division is null;
 
   -- cuanta gente ha jugado esta semana - eso decide cuantas divisiones hacen falta
-  select count(*) into eligible_count from public.league_ranking where matches_played > 0;
+  select count(*) into eligible_count from public.league_ranking where matches_played >= 2;
   target_divisions := greatest(1, ceil(eligible_count / 15.0))::int;
 
   -- ascensos y descensos, division por division, segun la clasificacion de ESTA semana
@@ -90,7 +95,7 @@ begin
     set league_division = greatest(1, d - 1)
     where id in (
       select player_id from public.league_ranking
-      where league_division = d and matches_played > 0
+      where league_division = d and matches_played >= 2
       order by week_score desc
       limit 3
     );
@@ -99,7 +104,7 @@ begin
     set league_division = d + 1
     where id in (
       select player_id from public.league_ranking
-      where league_division = d and matches_played > 0
+      where league_division = d and matches_played >= 2
       order by week_score asc
       limit 3
     );
