@@ -124,3 +124,32 @@ select cron.schedule(
   '5 0 * * 1', -- lunes 00:05 UTC - justo al empezar la semana (date_trunc('week', ...) usa lunes)
   $$ select public.run_league_promotions(); $$
 );
+
+-- ---- 5) asignacion INMEDIATA de division a jugadores nuevos ----
+-- antes, un jugador que se registraba a mitad de semana se quedaba sin division hasta el
+-- siguiente lunes (cuando corria run_league_promotions y los colocaba al fondo). Con este
+-- trigger, en cuanto se crea su perfil ya entra directamente en la division mas baja que exista
+-- en ese momento, sin esperar al cron semanal - coherente con "entras en las ligas
+-- automaticamente en cuanto juegas", que es lo que le decimos en la app. Añadido 2026-08-25.
+create or replace function public.assign_new_player_league_division()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  lowest_division int;
+begin
+  if new.league_division is null then
+    select coalesce(max(league_division), 1) into lowest_division from public.profiles;
+    new.league_division := lowest_division;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_assign_new_player_league_division on public.profiles;
+create trigger trg_assign_new_player_league_division
+  before insert on public.profiles
+  for each row
+  execute function public.assign_new_player_league_division();
