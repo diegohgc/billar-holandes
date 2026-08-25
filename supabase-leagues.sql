@@ -128,9 +128,14 @@ select cron.schedule(
 -- ---- 5) asignacion INMEDIATA de division a jugadores nuevos ----
 -- antes, un jugador que se registraba a mitad de semana se quedaba sin division hasta el
 -- siguiente lunes (cuando corria run_league_promotions y los colocaba al fondo). Con este
--- trigger, en cuanto se crea su perfil ya entra directamente en la division mas baja que exista
--- en ese momento, sin esperar al cron semanal - coherente con "entras en las ligas
--- automaticamente en cuanto juegas", que es lo que le decimos en la app. Añadido 2026-08-25.
+-- trigger, en cuanto se crea su perfil ya entra directamente en la division mas baja, sin
+-- esperar al cron semanal - coherente con "entras en las ligas automaticamente en cuanto
+-- juegas", que es lo que le decimos en la app. Añadido 2026-08-25.
+--
+-- IMPORTANTE (corregido el mismo dia): si la ultima division ya tiene ~15 jugadores, el nuevo
+-- NO se amontona ahi - abre una division nueva, todavia mas abajo, solo para el/los jugadores
+-- nuevos. Asi nadie que ya estuviera establecido en esa division puede verse arrastrado a bajar
+-- de division sin haberlo "perdido" de verdad esa semana - solo entra gente nueva a lo nuevo.
 create or replace function public.assign_new_player_league_division()
 returns trigger
 language plpgsql
@@ -139,9 +144,14 @@ set search_path = public
 as $$
 declare
   lowest_division int;
+  lowest_division_count int;
 begin
   if new.league_division is null then
     select coalesce(max(league_division), 1) into lowest_division from public.profiles;
+    select count(*) into lowest_division_count from public.profiles where league_division = lowest_division;
+    if lowest_division_count >= 15 then
+      lowest_division := lowest_division + 1; -- division nueva, vacia, solo para gente nueva
+    end if;
     new.league_division := lowest_division;
   end if;
   return new;
