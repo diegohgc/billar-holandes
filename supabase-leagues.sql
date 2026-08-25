@@ -11,8 +11,8 @@
 -- Duolingo) - se puede añadir mas adelante si una division llega a tener cientos de jugadores.
 --
 -- El NUMERO de divisiones no esta fijado a 10: se calcula solo cada semana segun cuanta
--- gente ha jugado esa semana (objetivo ~15 jugadores por division), sin tope maximo. Si la
--- base de jugadores crece mucho, saldran mas divisiones solas, sin tocar nada aqui.
+-- gente ha jugado esa semana (objetivo ~20 jugadores por division, subido de 15 el 2026-08-25),
+-- sin tope maximo. Si la base de jugadores crece mucho, saldran mas divisiones solas.
 --
 -- Puntuacion semanal: MEDIA de las partidas de esta semana (no la suma) - cambiado el
 -- 2026-08-25 porque con la suma ganaba siempre quien mas jugaba, no quien mejor jugaba. Con la
@@ -49,7 +49,7 @@ do $$
 declare
   target_divisions int;
 begin
-  select greatest(1, ceil(count(*) / 15.0))::int into target_divisions from public.profiles;
+  select greatest(1, ceil(count(*) / 20.0))::int into target_divisions from public.profiles;
 
   with best_scores as (
     select p.id, coalesce(max(m.score), 0) as best
@@ -87,7 +87,7 @@ begin
 
   -- cuanta gente ha jugado esta semana - eso decide cuantas divisiones hacen falta
   select count(*) into eligible_count from public.league_ranking where matches_played >= 2;
-  target_divisions := greatest(1, ceil(eligible_count / 15.0))::int;
+  target_divisions := greatest(1, ceil(eligible_count / 20.0))::int;
 
   -- ascensos y descensos, division por division, segun la clasificacion de ESTA semana
   for d in 1..max_division loop
@@ -132,10 +132,16 @@ select cron.schedule(
 -- esperar al cron semanal - coherente con "entras en las ligas automaticamente en cuanto
 -- juegas", que es lo que le decimos en la app. Añadido 2026-08-25.
 --
--- IMPORTANTE (corregido el mismo dia): si la ultima division ya tiene ~15 jugadores, el nuevo
--- NO se amontona ahi - abre una division nueva, todavia mas abajo, solo para el/los jugadores
--- nuevos. Asi nadie que ya estuviera establecido en esa division puede verse arrastrado a bajar
--- de division sin haberlo "perdido" de verdad esa semana - solo entra gente nueva a lo nuevo.
+-- IMPORTANTE (corregido el mismo dia, umbral subido a 20 el mismo dia tambien): si la ultima
+-- division ya tiene ~20 jugadores, el nuevo NO se amontona ahi - abre una division nueva,
+-- todavia mas abajo, solo para el/los jugadores nuevos. Asi nadie que ya estuviera establecido
+-- en esa division puede verse arrastrado a bajar de division sin haberlo "perdido" de verdad
+-- esa semana - solo entra gente nueva a lo nuevo.
+--
+-- Para que esa division nueva no se quede vacia/solitaria si solo se registran 1-3 jugadores
+-- reales esa semana, se trae con ellos a un puñado de jugadores DEMO (is_demo=true) de la
+-- division de arriba - a los ficticios les da igual de que division "vengan", y asi la nueva
+-- division tiene algo de vida desde el primer momento en vez de sentirse un pueblo fantasma.
 create or replace function public.assign_new_player_league_division()
 returns trigger
 language plpgsql
@@ -149,8 +155,16 @@ begin
   if new.league_division is null then
     select coalesce(max(league_division), 1) into lowest_division from public.profiles;
     select count(*) into lowest_division_count from public.profiles where league_division = lowest_division;
-    if lowest_division_count >= 15 then
-      lowest_division := lowest_division + 1; -- division nueva, vacia, solo para gente nueva
+    if lowest_division_count >= 20 then
+      update public.profiles
+      set league_division = lowest_division + 1
+      where id in (
+        select id from public.profiles
+        where is_demo = true and league_division = lowest_division
+        order by random()
+        limit 8
+      );
+      lowest_division := lowest_division + 1;
     end if;
     new.league_division := lowest_division;
   end if;
