@@ -104,13 +104,18 @@ begin
   end loop;
 end $$;
 
--- ---- 3) refresco automatico para siempre: una partida nueva cada 2 dias por jugador demo,
--- para que nunca caduquen de la clasificacion de media (regla de los 7 dias de inactividad) ----
+-- ---- 3) refresco automatico para siempre: una partida nueva cada dia por jugador demo, para
+-- que nunca caduquen de la clasificacion de media (regla de los 7 dias) NI de las ligas (regla
+-- de minimo 2 partidas/semana, ver supabase-leagues.sql) - antes era cada 2 dias, pero con el
+-- minimo de 2 partidas semanales para las ligas eso dejaba a los jugadores demo marcando 0
+-- durante buena parte de la semana. Cambiado a diario el 2026-08-25.
 create extension if not exists pg_cron;
+
+select cron.unschedule('refresh_demo_players_matches'); -- por si ya existia con el horario viejo
 
 select cron.schedule(
   'refresh_demo_players_matches',
-  '0 4 */2 * *',  -- las 4:00 UTC, cada 2 dias
+  '0 4 * * *',  -- las 4:00 UTC, todos los dias
   $$
   insert into public.solo_matches (player_id, score, sets, played_at)
   select
