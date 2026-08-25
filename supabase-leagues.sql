@@ -3,7 +3,9 @@
 -- Idea: ademas de la clasificacion de media/record (historica, sin memoria), un sistema
 -- de "ligas" semanales tipo Duolingo - cada jugador esta en una division (1a = la mejor),
 -- compite esa semana contra los demas de su misma division, y al cierre de la semana
--- ascienden los 5 primeros (division - 1) y descienden los 5 ultimos (division + 1).
+-- ascienden los 3 primeros (division - 1) y descienden los 3 ultimos (division + 1) - bajado
+-- de 5 a 3 el 2026-08-25 porque con pocos jugadores por division (~13-15) mover a 10 de golpe
+-- (5 arriba + 5 abajo) era demasiado movimiento cada semana.
 --
 -- Sin subgrupos por ahora (una sola division = un solo grupo, no divide en salas de 30 como
 -- Duolingo) - se puede añadir mas adelante si una division llega a tener cientos de jugadores.
@@ -89,7 +91,7 @@ begin
       select player_id from public.league_ranking
       where league_division = d and matches_played > 0
       order by week_score desc
-      limit 5
+      limit 3
     );
 
     update public.profiles
@@ -98,7 +100,7 @@ begin
       select player_id from public.league_ranking
       where league_division = d and matches_played > 0
       order by week_score asc
-      limit 5
+      limit 3
     );
   end loop;
 
