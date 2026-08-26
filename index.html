@@ -447,6 +447,7 @@
     <p id="nameHint" data-i18n="nameHint" style="font-size:12px; color:#f3e2c088; margin:-4px 0 10px;">Pon un nombre para que tus puntuaciones cuenten para el récord global</p>
     <button id="startGameBtn" class="bigBtn" data-i18n="startGame">Empezar partida</button>
     <button id="setupLeaderboardBtn" class="ghostBtn" data-i18n="leaderboard">Clasificación</button>
+    <button id="setupBackBtn" class="ghostBtn" data-i18n="mainMenu">Menú principal</button>
   </div>
 </div>
 
@@ -543,6 +544,7 @@
   let currentSession = null;
   let currentProfile = null;
   let isOnlineSoloMatch = false;
+  let lastMatchWasOnline = false; // para que "Nueva partida" sepa si debe ofrecer otra online o local
 
   function populateCountrySelect() {
     const sel = document.getElementById('onlineCountrySelect');
@@ -688,11 +690,12 @@
     document.getElementById('onlineProfileScreen').style.display = 'none';
     document.getElementById('onlineHubScreen').style.display = 'flex';
   });
-  document.getElementById('onlinePlaySoloBtn').addEventListener('click', () => {
+  // arranca una partida online en solitario - se usa tanto desde el hub online como desde
+  // "Nueva partida" en los resultados, cuando la partida anterior tambien fue online
+  function startOnlineSoloMatch() {
     if (!currentProfile) return;
     Sound.ensure();
     isOnlineSoloMatch = true;
-    document.getElementById('onlineHubScreen').style.display = 'none';
     players = [{
       name: currentProfile.name,
       isDefaultName: false,
@@ -706,6 +709,11 @@
     curPlayerIdx = 0;
     gamePhase = 'playing';
     startPlayerTurn();
+  }
+  document.getElementById('onlinePlaySoloBtn').addEventListener('click', () => {
+    if (!currentProfile) return;
+    document.getElementById('onlineHubScreen').style.display = 'none';
+    startOnlineSoloMatch();
   });
   document.getElementById('onlineHubBackBtn').addEventListener('click', () => {
     document.getElementById('onlineHubScreen').style.display = 'none';
@@ -1669,6 +1677,11 @@
     setupEl.style.display = 'none';
     showLeaderboard();
   });
+  document.getElementById('setupBackBtn').addEventListener('click', () => {
+    setupEl.style.display = 'none';
+    gamePhase = 'setup';
+    backToMainMenu();
+  });
   document.getElementById('closeLeaderboardBtn').addEventListener('click', () => {
     leaderboardScreenEl.style.display = 'none';
     setupEl.style.display = 'flex';
@@ -2116,6 +2129,7 @@
     updateProgressAfterMatch(ranked);
 
     const wasOnlineMatch = isOnlineSoloMatch;
+    lastMatchWasOnline = wasOnlineMatch;
     document.getElementById('leagueReminderBanner').style.display = 'none';
     if (isOnlineSoloMatch && currentSession) {
       const r = ranked[0];
@@ -2196,9 +2210,15 @@
 
   document.getElementById('newGameBtn').addEventListener('click', () => {
     resultsScreenEl.style.display = 'none';
-    setupEl.style.display = 'flex';
     gamePhase = 'setup';
-    populateKnownPlayerNames();
+    // si la partida que acaba de terminar era online, "Nueva partida" arranca otra online
+    // directamente, en vez de llevar siempre a la pantalla de configuracion del modo local
+    if (lastMatchWasOnline && currentSession && currentProfile) {
+      startOnlineSoloMatch();
+    } else {
+      setupEl.style.display = 'flex';
+      populateKnownPlayerNames();
+    }
   });
 
   document.getElementById('resultsMenuBtn').addEventListener('click', () => {
