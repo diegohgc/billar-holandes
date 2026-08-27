@@ -2746,7 +2746,11 @@
   // publico con forma de cuerpo (cilindro) + cabeza (esfera) en vez de una simple caja -
   // dos InstancedMesh que comparten indice de instancia (misma persona = mismo indice en
   // ambos), barato de renderizar hasta 200 personas
-  const STADIUM_MAX_PEOPLE = 200;
+  // capacidad de render (no confundir con "asientos" economicos, ver mas abajo): con la
+  // grada completa (200) y 4 filas, a densidad realista caben unas 800 personas - se
+  // renderizan como maximo esas, muy barato via InstancedMesh (1 sola llamada de dibujo)
+  const STADIUM_MAX_PEOPLE = 800;
+  const PERSON_SPACING_Z = 2; // separacion entre columnas de gente, fija, NO depende de cuantos asientos tengas comprados
   const CLOTHES_COLORS = [0xd8442e, 0xe8b23a, 0x3b7dc9, 0x4f9e5c, 0xf3e2c0, 0x8a5c34, 0xffffff, 0x7a3ba0];
   const SKIN_COLORS = [0xf0c8a0, 0xd8a878, 0xb87d4e, 0x8a5a34, 0x5c3a20];
   const bodyGeo = new THREE.CylinderGeometry(0.55, 0.68, 1.6, 6);
@@ -2775,21 +2779,24 @@
       mesh.position.set(mesh.userData.xCenter, mesh.userData.rowHeight / 2, zPos);
     });
 
-    // gente en cuadricula (una fila fisica por escalon) en vez de esparcida al azar - asi
-    // al 100% de aforo se ve realmente llena, no un puñado de gente perdida en un asiento
-    // enorme (feedback del usuario), y cada persona se apoya en su escalon real
+    // gente en cuadricula DENSA (separacion fija, no ligada a cuantos asientos tengas
+    // comprados) - "asientos construidos" solo decide el TAMAÑO de la grada (su longitud),
+    // y el % de ocupacion decide que fraccion de esa densidad fija esta llena, siempre de
+    // forma continua y uniforme del 1% al 100% - así al 100% se ve realmente compacta, sin
+    // huecos de suelo visibles (feedback del usuario), sea cual sea el tamaño del estadio
     const dummyBody = new THREE.Object3D();
     const dummyHead = new THREE.Object3D();
     const clothes = new THREE.Color();
     const skin = new THREE.Color();
     let instanceIdx = 0;
     [-1, 1].forEach(sign => {
-      if (seatsPerSideInt <= 0 || standLength <= 0) return;
-      const cols = Math.max(1, Math.ceil(seatsPerSideInt / STAND_ROWS));
+      if (standLength <= 0) return;
+      const cols = Math.max(1, Math.floor(standLength / PERSON_SPACING_Z));
       const colSpacing = standLength / cols;
+      const capacity = cols * STAND_ROWS;
       const slots = [];
-      for (let col = 0; col < cols && slots.length < seatsPerSideInt; col++) {
-        for (let row = 0; row < STAND_ROWS && slots.length < seatsPerSideInt; row++) {
+      for (let col = 0; col < cols; col++) {
+        for (let row = 0; row < STAND_ROWS; row++) {
           slots.push({ col, row });
         }
       }
@@ -2798,7 +2805,7 @@
         const j = Math.floor(Math.random() * (i + 1));
         [slots[i], slots[j]] = [slots[j], slots[i]];
       }
-      const attendanceSide = Math.max(0, Math.min(seatsPerSideInt, Math.round((occupancyFraction || 0) * seatsPerSideInt)));
+      const attendanceSide = Math.max(0, Math.min(capacity, Math.round((occupancyFraction || 0) * capacity)));
       for (let i = 0; i < attendanceSide && instanceIdx < STADIUM_MAX_PEOPLE; i++) {
         const slot = slots[i];
         const rowHeight = STAND_ROW_HEIGHTS[slot.row];
