@@ -352,6 +352,7 @@
     <div id="stadiumPhases"></div>
 
     <p style="text-align:center; margin:14px 0 0; font-size:12px; color:#f3e2c088;" data-i18n="stadiumEarnNote">Ganas monedas jugando online: 1 moneda por cada 10 puntos, más un bono diario por volver.</p>
+    <p id="stadiumMsg" style="display:none; text-align:center; margin:10px 0 0; font-size:13px; color:#ffb0a0; background:rgba(255,138,128,0.12); border:1px solid rgba(255,138,128,0.4); border-radius:8px; padding:8px;"></p>
     <button id="closeStadiumBtn" class="bigBtn" data-i18n="close">Cerrar</button>
   </div>
 </div>
@@ -994,6 +995,7 @@
 
   async function loadStadiumScreen() {
     if (!currentSession) return;
+    document.getElementById('stadiumMsg').style.display = 'none';
     const { data: profile } = await sb.from('profiles').select('coins, seats_built, quality_upgrades')
       .eq('id', currentSession.user.id).maybeSingle();
     if (!profile) return;
@@ -1042,17 +1044,27 @@
     });
   }
 
+  // aviso integrado en la propia pantalla (nunca alert() nativo - en WebView/Android sale
+  // con el prefijo "La página en https://... dice", feo y fuera de sitio)
+  function showStadiumMsg(text) {
+    const el = document.getElementById('stadiumMsg');
+    el.textContent = text;
+    el.style.display = 'block';
+    clearTimeout(showStadiumMsg._t);
+    showStadiumMsg._t = setTimeout(() => { el.style.display = 'none'; }, 3200);
+  }
+
   async function buyStadiumPack() {
     const { data, error } = await sb.rpc('buy_seat_pack');
     if (error) { console.error('buy_seat_pack failed:', error); return; }
-    if (!data.ok) { alert(t('stadiumBuyFailed_' + data.reason) || t('stadiumBuyFailed_generic')); return; }
+    if (!data.ok) { showStadiumMsg(t('stadiumBuyFailed_' + data.reason) || t('stadiumBuyFailed_generic')); return; }
     loadStadiumScreen();
   }
 
   async function buyStadiumUpgrade() {
     const { data, error } = await sb.rpc('buy_quality_upgrade');
     if (error) { console.error('buy_quality_upgrade failed:', error); return; }
-    if (!data.ok) { alert(t('stadiumBuyFailed_' + data.reason) || t('stadiumBuyFailed_generic')); return; }
+    if (!data.ok) { showStadiumMsg(t('stadiumBuyFailed_' + data.reason) || t('stadiumBuyFailed_generic')); return; }
     loadStadiumScreen();
   }
 
