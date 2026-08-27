@@ -204,7 +204,8 @@
 <div id="ui">
   <div class="box">
     <span id="curPlayerName" class="big">-</span><br>
-    <span data-i18n="round">Tanda</span> <span id="roundNum">1</span>/3 · <span data-i18n="discs">Fichas</span>: <span id="shotsLeft">20</span>
+    <span style="white-space:nowrap;"><span data-i18n="round">Tanda</span> <span id="roundNum">1</span>/3</span><br>
+    <span style="white-space:nowrap;"><span data-i18n="discs">Fichas</span>: <span id="shotsLeft">20</span></span>
     <div id="reserve"></div>
     <div id="gameHudStadium" style="display:none; font-size:12px; color:#ffcf7a; margin-top:2px; white-space:nowrap;"></div>
   </div>
@@ -511,8 +512,8 @@
     <h2 data-i18n="finalResults">Resultados finales</h2>
     <div id="resultsList"></div>
     <div id="leagueReminderBanner" style="display:none; margin-top:12px; padding:10px 12px; background:rgba(201,138,46,0.15); border:1px solid #c98a2e88; border-radius:10px; font-size:13px; text-align:center; color:#f3e2c0;" data-i18n="leagueFirstMatchReminder">¡Esta es tu primera partida de la semana en la liga! Necesitas jugar al menos 2 para que tu puntuación semanal cuente - de momento marcarás 0.</div>
-    <div id="onlineResultsRankBox" style="display:none;">
-      <p style="margin:16px 0 4px; font-weight:700; text-align:center;" data-i18n="onlineResultsRankTitle">Clasificación mensual (media de todos los jugadores)</p>
+    <div id="onlineResultsRankBox" style="display:none; margin-top:14px; padding:10px; border-radius:12px; background:rgba(201,138,46,0.10); border:1px solid #c98a2e66;">
+      <p style="margin:0 0 4px; font-weight:700; text-align:center; color:#ffcf7a;">🏆 <span data-i18n="onlineResultsRankTitle">Clasificación mensual (media de todos los jugadores)</span></p>
       <div id="onlineResultsRankList"></div>
       <div id="onlineResultsYouBox" style="display:none; margin-top:8px; padding-top:8px; border-top:1px solid #4a2c0f;">
         <p style="text-align:center; margin:0 0 4px; font-size:11px; color:#f3e2c088;" data-i18n="yourPosition">Tu posición</p>
@@ -520,14 +521,14 @@
       </div>
       <p id="onlineResultsGapText" style="display:none; text-align:center; margin:8px 0 0; font-size:12px; color:#ffcf7a;"></p>
     </div>
-    <div id="onlineResultsLeagueBox" style="display:none;">
-      <p style="margin:16px 0 4px; font-weight:700; text-align:center;" data-i18n="onlineResultsLeagueTitle">Tu división esta semana</p>
+    <div id="onlineResultsLeagueBox" style="display:none; margin-top:10px; padding:10px; border-radius:12px; background:rgba(59,125,201,0.10); border:1px solid #3b7dc966;">
+      <p style="margin:0 0 4px; font-weight:700; text-align:center; color:#8fc4ff;">🛡️ <span data-i18n="onlineResultsLeagueTitle">Tu división esta semana</span></p>
       <div id="onlineResultsLeagueList"></div>
-      <div id="onlineResultsLeagueYouBox" style="display:none; margin-top:8px; padding-top:8px; border-top:1px solid #4a2c0f;">
-        <p style="text-align:center; margin:0 0 4px; font-size:11px; color:#f3e2c088;" data-i18n="yourPosition">Tu posición</p>
-        <div id="onlineResultsLeagueYouRow" class="scoreRow" style="background:rgba(201,138,46,0.18); border-radius:8px;"></div>
+      <div id="onlineResultsLeagueYouBox" style="display:none; margin-top:8px; padding-top:8px; border-top:1px solid #2a3f52;">
+        <p style="text-align:center; margin:0 0 4px; font-size:11px; color:#8fc4ff88;" data-i18n="yourPosition">Tu posición</p>
+        <div id="onlineResultsLeagueYouRow" class="scoreRow" style="background:rgba(59,125,201,0.18); border-radius:8px;"></div>
       </div>
-      <p id="onlineResultsLeagueGapText" style="display:none; text-align:center; margin:8px 0 0; font-size:12px; color:#ffcf7a;"></p>
+      <p id="onlineResultsLeagueGapText" style="display:none; text-align:center; margin:8px 0 0; font-size:12px; color:#8fc4ff;"></p>
     </div>
     <div id="globalRecordBox">
       <p style="margin:16px 0 4px; font-weight:700; text-align:center;" data-i18n="globalRecord">Récord global del dispositivo</p>
@@ -2138,7 +2139,6 @@
       Haptics.buzz([25, 40, 25]);
       flashSet();
       spawnSetConfetti();
-      triggerStadiumSweep();
       gateFloors.forEach(f => f.material.color.setHex(POCKET_GREEN));
       gateLips.forEach(l => l.material.color.setHex(POCKET_GREEN));
       setTimeout(refreshPocketColors, 450);
@@ -2581,18 +2581,6 @@
   scene.fog = new THREE.Fog(0x0f0a05, 420, 620);
 
   const camera = new THREE.PerspectiveCamera(42, 1, 1, 1000);
-
-  // barrido de camara por la grada al completar un SET (ver spawnSetConfetti/onDiscScored) -
-  // stadiumSweepT null = inactivo; si no, 0..1 de progreso. Mientras esta activo, toma el
-  // control total de la camara por encima de todo lo demas (updateCamera lo comprueba lo
-  // primero de todo).
-  let stadiumSweepT = null;
-  const STADIUM_SWEEP_DURATION = 2.0;
-  const sweepCamPos = new THREE.Vector3();
-  const sweepCamLook = new THREE.Vector3();
-  function triggerStadiumSweep() {
-    stadiumSweepT = 0;
-  }
 
   // resting framing (whole lane visible) vs. follow framing (closer, tracks the puck while it flies)
   const restCamPos = new THREE.Vector3();
@@ -3679,23 +3667,6 @@
     return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
   }
   function updateCamera(dt) {
-    if (stadiumSweepT !== null) {
-      stadiumSweepT += dt / STADIUM_SWEEP_DURATION;
-      if (stadiumSweepT >= 1) {
-        stadiumSweepT = null; // termina el barrido, sigue con la logica normal de abajo
-      } else {
-        // barrido lateral a lo largo de la grada izquierda, de cerca de la entrada hacia
-        // el fondo y vuelta, viendo al publico celebrar el SET recien completado
-        const t = easeInOutCubic(Math.min(1, stadiumSweepT));
-        const swing = Math.sin(t * Math.PI); // 0 -> 1 -> 0: va y vuelve en el mismo barrido
-        const z = -20 - swing * 150;
-        sweepCamPos.set(-58, 34, z + 40);
-        sweepCamLook.set(-38, 9, z);
-        camera.position.copy(sweepCamPos);
-        camera.lookAt(sweepCamLook);
-        return;
-      }
-    }
     if (!camTargetPuck) {
       camBlend = 0;
       camera.position.copy(restCamPos);
