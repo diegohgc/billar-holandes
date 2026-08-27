@@ -1516,33 +1516,11 @@
       const v = Math.max(0, Math.min(1, level || 0));
       crowdBusGain.gain.setTargetAtTime(v * 0.09, ctx.currentTime, 0.6);
     }
-    // celebracion del publico al completar un SET: aplausos (palmadas individuales, densidad
-    // alta al principio y decreciente) + vitores (varias "voces" superpuestas entrando en
-    // momentos distintos) durante 5 segundos, mas fuerte cuanta mas gente haya (0..1)
-    let clapBufferCache = null;
-    function getClapBuffer() {
-      const c = ctx;
-      if (clapBufferCache) return clapBufferCache;
-      const buf = c.createBuffer(1, Math.floor(c.sampleRate * 0.03), c.sampleRate);
-      const d = buf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 1.6);
-      clapBufferCache = buf;
-      return buf;
-    }
-    function playClap(time, gainMul) {
-      const c = ctx;
-      const nb = c.createBufferSource();
-      nb.buffer = getClapBuffer();
-      nb.playbackRate.value = 0.85 + Math.random() * 0.5;
-      const bp = c.createBiquadFilter();
-      bp.type = 'bandpass';
-      bp.frequency.value = 1500 + Math.random() * 1800;
-      bp.Q.value = 1.0 + Math.random() * 1.2;
-      const g = c.createGain();
-      g.gain.value = (0.35 + Math.random() * 0.35) * gainMul;
-      nb.connect(bp).connect(g).connect(c.destination);
-      nb.start(time);
-    }
+    // celebracion del publico al completar un SET: SOLO el murmullo de admiracion del
+    // publico (varias "voces" superpuestas, como un "¡oooooh!" colectivo) durante 5
+    // segundos, mas fuerte e intenso cuanta mas gente haya (0..1) - sin aplausos, se
+    // probaron varias versiones de aplauso sintetico y ninguna sonaba bien (a "petardeo"),
+    // el usuario prefirio quedarse solo con el murmullo/vitores que si sonaba realista
     function crowdCheer(level) {
       const c = ctx; if (!c || !enabled) return;
       const v = Math.max(0, Math.min(1, level || 0));
@@ -1550,23 +1528,13 @@
       const now = c.currentTime;
       const CELEBRATION_DURATION = 5;
 
-      // aplausos: muchas palmadas sueltas repartidas en los 5s, mas densas al principio
-      const numClaps = Math.round(90 + v * 220);
-      for (let i = 0; i < numClaps; i++) {
-        // sesgo hacia tiempos tempranos (raiz cuadrada de un valor uniforme) para que la
-        // densidad decaiga con el tiempo, como un aplauso real que se va apagando
-        const tNorm = Math.sqrt(Math.random());
-        const t = now + 0.05 + tNorm * (CELEBRATION_DURATION - 0.6);
-        const densityFade = 1 - tNorm * 0.5; // las palmadas del final suenan algo mas flojas
-        playClap(t, v * densityFade);
-      }
-
-      // vitores: varias voces superpuestas ("¡eeeh!") que entran escalonadas, cada una con su
-      // propia subida y caida de volumen y un vibrato lento en el filtro
-      const numVoices = Math.round(4 + v * 5);
+      // varias voces superpuestas ("¡oooooh!") que entran casi a la vez (reaccion conjunta
+      // al SET) y luego se apagan de forma escalonada, cada una con su propia subida/caida
+      // de volumen y un vibrato lento en el filtro
+      const numVoices = Math.round(7 + v * 8);
       for (let i = 0; i < numVoices; i++) {
-        const startT = now + Math.random() * 1.2;
-        const dur = 2.2 + Math.random() * 2.3;
+        const startT = now + Math.random() * 0.35;
+        const dur = 3 + Math.random() * 2.4;
         const endT = Math.min(startT + dur, now + CELEBRATION_DURATION);
         const voiceDur = Math.max(0.4, endT - startT);
         const nb = c.createBufferSource();
