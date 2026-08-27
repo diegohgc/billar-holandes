@@ -1473,53 +1473,126 @@
       slideGain.gain.setTargetAtTime(v * 0.10, ctx.currentTime, 0.05);
       slideFilter.frequency.setTargetAtTime(230 + v * 260, ctx.currentTime, 0.05);
     }
-    // murmullo de fondo del publico en las gradas (ver "Mi Estadio"): un ruido filtrado en
-    // bucle, muy suave, cuyo volumen sigue el aforo actual (0 = grada vacia/sin partida
-    // online, 1 = llena) - level 0..1, se actualiza cada vez que cambia el HUD de la partida
-    let crowdNode = null, crowdGain = null, crowdFilter = null;
+    // murmullo de fondo del publico en las gradas (ver "Mi Estadio") - 3 capas de ruido en
+    // bucle con distinto tono, cada una con su propio filtro "deambulando" lentamente entre
+    // frecuencias al azar (como si distintos grupos de gente hablaran a la vez, no un tono
+    // plano) - level 0..1 segun el aforo, se actualiza cada vez que cambia el HUD
+    let crowdLayers = null, crowdBusGain = null;
+    const CROWD_LAYER_SPECS = [
+      { base: 260, range: 90, q: 1.0 },  // voces graves de fondo
+      { base: 520, range: 160, q: 0.8 }, // grueso del murmullo
+      { base: 950, range: 220, q: 0.7 }, // charla mas cercana/aguda
+    ];
     function ensureCrowd() {
-      if (!ctx || crowdNode) return;
-      const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 3), ctx.sampleRate);
-      const d = buf.getChannelData(0);
-      let last = 0;
-      for (let i = 0; i < d.length; i++) { const w = Math.random() * 2 - 1; last = (last + 0.015 * w) / 1.015; d[i] = last * 4; }
-      crowdNode = ctx.createBufferSource(); crowdNode.buffer = buf; crowdNode.loop = true;
-      crowdFilter = ctx.createBiquadFilter(); crowdFilter.type = 'bandpass'; crowdFilter.frequency.value = 550; crowdFilter.Q.value = 0.6;
-      crowdGain = ctx.createGain(); crowdGain.gain.value = 0;
-      crowdNode.connect(crowdFilter).connect(crowdGain).connect(ctx.destination);
-      crowdNode.start();
+      if (!ctx || crowdLayers) return;
+      crowdBusGain = ctx.createGain(); crowdBusGain.gain.value = 0;
+      crowdBusGain.connect(ctx.destination);
+      crowdLayers = CROWD_LAYER_SPECS.map(spec => {
+        const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 4), ctx.sampleRate);
+        const d = buf.getChannelData(0);
+        let last = 0;
+        for (let i = 0; i < d.length; i++) { const w = Math.random() * 2 - 1; last = (last + 0.02 * w) / 1.02; d[i] = last * 3.5; }
+        const node = ctx.createBufferSource(); node.buffer = buf; node.loop = true;
+        const filter = ctx.createBiquadFilter(); filter.type = 'bandpass'; filter.frequency.value = spec.base; filter.Q.value = spec.q;
+        const gain = ctx.createGain(); gain.gain.value = 1 / CROWD_LAYER_SPECS.length;
+        node.connect(filter).connect(gain).connect(crowdBusGain);
+        node.start();
+        // deambula la frecuencia del filtro al azar dentro de su rango, sin fin, para que
+        // el murmullo respire y no suene a tono de radio fijo
+        (function wander() {
+          if (!ctx) return;
+          const target = spec.base + (Math.random() * 2 - 1) * spec.range;
+          filter.frequency.setTargetAtTime(target, ctx.currentTime, 1.4);
+          setTimeout(wander, 1800 + Math.random() * 1400);
+        })();
+        return { node, filter, gain };
+      });
     }
     function setCrowdLevel(level) {
       if (!ctx) return;
-      if (!enabled) { if (crowdGain) crowdGain.gain.value = 0; return; }
+      if (!enabled) { if (crowdBusGain) crowdBusGain.gain.value = 0; return; }
       ensureCrowd();
-      if (!crowdGain) return;
+      if (!crowdBusGain) return;
       const v = Math.max(0, Math.min(1, level || 0));
-      crowdGain.gain.setTargetAtTime(v * 0.075, ctx.currentTime, 0.6);
+      crowdBusGain.gain.setTargetAtTime(v * 0.09, ctx.currentTime, 0.6);
     }
-    // ovacion del publico al completar un SET - capas de ruido con distintos filtros que suben
-    // y bajan como una ola, mas fuerte e intensa cuanta mas gente haya en las gradas (0..1)
+    // celebracion del publico al completar un SET: aplausos (palmadas individuales, densidad
+    // alta al principio y decreciente) + vitores (varias "voces" superpuestas entrando en
+    // momentos distintos) durante 5 segundos, mas fuerte cuanta mas gente haya (0..1)
+    let clapBufferCache = null;
+    function getClapBuffer() {
+      const c = ctx;
+      if (clapBufferCache) return clapBufferCache;
+      const buf = c.createBuffer(1, Math.floor(c.sampleRate * 0.03), c.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 1.6);
+      clapBufferCache = buf;
+      return buf;
+    }
+    function playClap(time, gainMul) {
+      const c = ctx;
+      const nb = c.createBufferSource();
+      nb.buffer = getClapBuffer();
+      nb.playbackRate.value = 0.85 + Math.random() * 0.5;
+      const bp = c.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1500 + Math.random() * 1800;
+      bp.Q.value = 1.0 + Math.random() * 1.2;
+      const g = c.createGain();
+      g.gain.value = (0.35 + Math.random() * 0.35) * gainMul;
+      nb.connect(bp).connect(g).connect(c.destination);
+      nb.start(time);
+    }
     function crowdCheer(level) {
       const c = ctx; if (!c || !enabled) return;
       const v = Math.max(0, Math.min(1, level || 0));
       if (v < 0.05) return;
       const now = c.currentTime;
-      const dur = 1.2 + v * 0.6;
-      [{ freq: 700, q: 0.5, peak: 0.22 }, { freq: 1400, q: 0.7, peak: 0.14 }].forEach(({ freq, q, peak }) => {
+      const CELEBRATION_DURATION = 5;
+
+      // aplausos: muchas palmadas sueltas repartidas en los 5s, mas densas al principio
+      const numClaps = Math.round(90 + v * 220);
+      for (let i = 0; i < numClaps; i++) {
+        // sesgo hacia tiempos tempranos (raiz cuadrada de un valor uniforme) para que la
+        // densidad decaiga con el tiempo, como un aplauso real que se va apagando
+        const tNorm = Math.sqrt(Math.random());
+        const t = now + 0.05 + tNorm * (CELEBRATION_DURATION - 0.6);
+        const densityFade = 1 - tNorm * 0.5; // las palmadas del final suenan algo mas flojas
+        playClap(t, v * densityFade);
+      }
+
+      // vitores: varias voces superpuestas ("¡eeeh!") que entran escalonadas, cada una con su
+      // propia subida y caida de volumen y un vibrato lento en el filtro
+      const numVoices = Math.round(4 + v * 5);
+      for (let i = 0; i < numVoices; i++) {
+        const startT = now + Math.random() * 1.2;
+        const dur = 2.2 + Math.random() * 2.3;
+        const endT = Math.min(startT + dur, now + CELEBRATION_DURATION);
+        const voiceDur = Math.max(0.4, endT - startT);
         const nb = c.createBufferSource();
-        const buf = c.createBuffer(1, Math.floor(c.sampleRate * dur), c.sampleRate);
+        const buf = c.createBuffer(1, Math.floor(c.sampleRate * voiceDur), c.sampleRate);
         const d = buf.getChannelData(0);
         let last = 0;
-        for (let i = 0; i < d.length; i++) { const w = Math.random() * 2 - 1; last = (last + 0.05 * w) / 1.05; d[i] = last * 3; }
+        for (let j = 0; j < d.length; j++) { const w = Math.random() * 2 - 1; last = (last + 0.06 * w) / 1.06; d[j] = last * 3; }
         nb.buffer = buf;
-        const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = freq; bp.Q.value = q;
+        const baseFreq = 500 + Math.random() * 700;
+        const bp = c.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.value = baseFreq;
+        bp.Q.value = 3 + Math.random() * 3;
+        // vibrato lento de la voz (leve subida y bajada de tono, como un "¡eeeeh!")
+        const lfo = c.createOscillator(); lfo.frequency.value = 3 + Math.random() * 2;
+        const lfoGain = c.createGain(); lfoGain.gain.value = baseFreq * 0.12;
+        lfo.connect(lfoGain).connect(bp.frequency);
+        lfo.start(startT); lfo.stop(startT + voiceDur);
         const g = c.createGain();
-        g.gain.setValueAtTime(0.0001, now);
-        g.gain.linearRampToValueAtTime(peak * v, now + dur * 0.25);
-        g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+        const peak = (0.10 + Math.random() * 0.08) * v;
+        g.gain.setValueAtTime(0.0001, startT);
+        g.gain.linearRampToValueAtTime(peak, startT + voiceDur * 0.3);
+        g.gain.exponentialRampToValueAtTime(0.0001, startT + voiceDur);
         nb.connect(bp).connect(g).connect(c.destination);
-        nb.start(now);
-      });
+        nb.start(startT);
+      }
     }
     return {
       ensure, knock, score, launch, setDone, setSlide, setCrowdLevel, crowdCheer,
@@ -1530,7 +1603,7 @@
           if (musicGain && musicOn) musicGain.gain.setTargetAtTime(MUSIC_BASE_GAIN, ctx.currentTime, 0.3);
         } else {
           if (slideGain) slideGain.gain.value = 0;
-          if (crowdGain) crowdGain.gain.value = 0;
+          if (crowdBusGain) crowdBusGain.gain.value = 0;
           if (musicGain) musicGain.gain.setTargetAtTime(0, ctx.currentTime, 0.3);
         }
         return enabled;
