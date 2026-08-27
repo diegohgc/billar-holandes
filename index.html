@@ -606,6 +606,7 @@
         `${profile.name} (${profile.country})`;
     }
     currentProfile = profile;
+    loadStadiumVisualData();
     return profile;
   }
 
@@ -756,6 +757,9 @@
   });
   document.getElementById('onlineLogoutBtn').addEventListener('click', async () => {
     await sb.auth.signOut();
+    currentSession = null;
+    currentProfile = null;
+    loadStadiumVisualData(); // vacía la mesa (sin sesión no hay estadio que mostrar)
     document.getElementById('onlineHubScreen').style.display = 'none';
     backToMainMenu();
   });
@@ -1081,6 +1085,7 @@
     if (error) { console.error('buy_seat_pack failed:', error); return; }
     if (!data.ok) { showStadiumMsg(t('stadiumBuyFailed_' + data.reason) || t('stadiumBuyFailed_generic')); return; }
     loadStadiumScreen();
+    loadStadiumVisualData();
   }
 
   async function buyStadiumRenovation() {
@@ -1088,6 +1093,7 @@
     if (error) { console.error('buy_renovation_pack failed:', error); return; }
     if (!data.ok) { showStadiumMsg(t('stadiumBuyFailed_' + data.reason) || t('stadiumBuyFailed_generic')); return; }
     loadStadiumScreen();
+    loadStadiumVisualData();
   }
 
   document.getElementById('onlineStadiumBtn').addEventListener('click', () => {
@@ -2414,6 +2420,7 @@
       sb.rpc('award_match_coins', { match_score: r.score }).then(({ data, error }) => {
         if (error) { console.error('award_match_coins failed:', error); return; }
         if (data > 0) showCoinToast(data);
+        loadStadiumVisualData(); // el aforo puede haber cambiado si esta partida movio tu posicion en la liga
       });
       isOnlineSoloMatch = false;
     }
@@ -2699,6 +2706,106 @@
     return group;
   }
   scene.add(buildSkirt());
+
+  // ---- estadio: gradas + publico a los lados de la mesa (ver "Mi Estadio" / supabase-
+  // stadium*.sql). Crecen segun los asientos construidos y se llenan de gente segun la
+  // posicion en la liga esa semana (mas ocupacion cuanto mejor vas, y aun mas en fin de
+  // semana). Se colocan siempre FUERA del ancho del tablero para no estorbar nunca la
+  // camara ni la jugada. ----
+  const STADIUM_MATERIAL_COLORS = [0xa9764a, 0x8a8a85, 0x3f6b8f, 0xc98a2e];
+  const STAND_MAX_SEATS_PER_SIDE = 100; // 200 asientos totales repartidos entre los 2 lados
+  const STAND_DEPTH = 14;
+  const STAND_HEIGHT = 9;
+  const STAND_MARGIN = 6; // separacion respecto al borde del tablero
+  const STAND_X_LEFT = -(bottomHalf + STAND_MARGIN + STAND_DEPTH / 2);
+  const STAND_X_RIGHT = bottomHalf + STAND_MARGIN + STAND_DEPTH / 2;
+
+  const standGroup = new THREE.Group();
+  scene.add(standGroup);
+
+  const standMatL = new THREE.MeshStandardMaterial({ color: STADIUM_MATERIAL_COLORS[0], roughness: 0.85 });
+  const standMatR = new THREE.MeshStandardMaterial({ color: STADIUM_MATERIAL_COLORS[0], roughness: 0.85 });
+  const standGeo = new THREE.BoxGeometry(STAND_DEPTH, STAND_HEIGHT, 1); // longitud (Z) se escala en updateStadiumVisual
+  const standMeshL = new THREE.Mesh(standGeo, standMatL);
+  const standMeshR = new THREE.Mesh(standGeo, standMatR);
+  standMeshL.castShadow = standMeshL.receiveShadow = true;
+  standMeshR.castShadow = standMeshR.receiveShadow = true;
+  standMeshL.visible = standMeshR.visible = false;
+  standGroup.add(standMeshL, standMeshR);
+
+  const STADIUM_MAX_PEOPLE = 200;
+  const PERSON_COLORS = [0xd8442e, 0xe8b23a, 0x3b7dc9, 0x4f9e5c, 0xf3e2c0, 0x8a5c34, 0xffffff];
+  const personGeo = new THREE.BoxGeometry(1.6, 2.6, 1.4);
+  const personMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
+  const peopleMesh = new THREE.InstancedMesh(personGeo, personMat, STADIUM_MAX_PEOPLE);
+  peopleMesh.castShadow = true;
+  peopleMesh.count = 0;
+  standGroup.add(peopleMesh);
+
+  // seatsBuilt: asientos ya construidos (0-200) - materialTier: 1 madera..4 premium -
+  // occupancyFraction: 0-1, cuanta gente del aforo actual esta sentada hoy
+  function updateStadiumVisual(seatsBuilt, materialTier, occupancyFraction) {
+    const color = STADIUM_MATERIAL_COLORS[Math.max(0, Math.min(3, (materialTier || 1) - 1))];
+    standMatL.color.setHex(color);
+    standMatR.color.setHex(color);
+
+    const seatsPerSide = (seatsBuilt || 0) / 2;
+    const lenFraction = Math.min(1, seatsPerSide / STAND_MAX_SEATS_PER_SIDE);
+    const standLength = BOARD.length * lenFraction;
+    const yPos = STAND_HEIGHT / 2;
+    const zPos = -standLength / 2;
+
+    [[standMeshL, STAND_X_LEFT], [standMeshR, STAND_X_RIGHT]].forEach(([mesh, x]) => {
+      mesh.visible = standLength > 0.5;
+      mesh.scale.z = Math.max(0.001, standLength);
+      mesh.position.set(x, yPos, zPos);
+    });
+
+    const attendance = Math.max(0, Math.min(seatsBuilt || 0, Math.round((occupancyFraction || 0) * (seatsBuilt || 0))));
+    peopleMesh.count = attendance;
+    if (attendance > 0) {
+      const dummy = new THREE.Object3D();
+      const c = new THREE.Color();
+      for (let i = 0; i < attendance; i++) {
+        const x0 = i % 2 === 0 ? STAND_X_LEFT : STAND_X_RIGHT;
+        const z = -Math.random() * standLength;
+        const x = x0 + (Math.random() - 0.5) * (STAND_DEPTH - 2);
+        dummy.position.set(x, STAND_HEIGHT + 1.4, z);
+        dummy.rotation.y = Math.random() * Math.PI * 2;
+        dummy.updateMatrix();
+        peopleMesh.setMatrixAt(i, dummy.matrix);
+        c.setHex(PERSON_COLORS[Math.floor(Math.random() * PERSON_COLORS.length)]);
+        peopleMesh.setColorAt(i, c);
+      }
+    }
+    peopleMesh.instanceMatrix.needsUpdate = true;
+    if (peopleMesh.instanceColor) peopleMesh.instanceColor.needsUpdate = true;
+  }
+
+  // consulta el estadio del jugador (asientos, material, y su ocupacion segun la
+  // clasificacion de liga de esta semana) y actualiza la mesa 3D - se llama al iniciar
+  // sesion, tras comprar packs/reformas, y al terminar una partida online
+  async function loadStadiumVisualData() {
+    if (!currentSession) { updateStadiumVisual(0, 1, 0); return; }
+    const { data: profile } = await sb.from('profiles').select('seats_built, material_tier, league_division')
+      .eq('id', currentSession.user.id).maybeSingle();
+    if (!profile) { updateStadiumVisual(0, 1, 0); return; }
+    let occupancy = 0;
+    if (profile.league_division) {
+      const { data: rows } = await sb.from('league_ranking').select('player_id, week_score')
+        .eq('league_division', profile.league_division).order('week_score', { ascending: false });
+      if (rows && rows.length) {
+        const idx = rows.findIndex(r => r.player_id === currentSession.user.id);
+        if (idx >= 0) {
+          const percentile = idx / Math.max(rows.length - 1, 1);
+          occupancy = percentile <= 0.15 ? 0.90 : (percentile <= 0.5 ? 0.55 : 0.20);
+          const dow = new Date().getDay(); // 0 domingo, 6 sabado
+          if (dow === 0 || dow === 6) occupancy = Math.min(1, occupancy + 0.15);
+        }
+      }
+    }
+    updateStadiumVisual(profile.seats_built || 0, profile.material_tier || 1, occupancy);
+  }
 
   // ---- gate housing: recessed pocket floors + back wall + dividing posts + front lip ----
   const gateGroup = new THREE.Group();
