@@ -2711,69 +2711,82 @@
   // stadium*.sql). Crecen segun los asientos construidos y se llenan de gente segun la
   // posicion en la liga esa semana (mas ocupacion cuanto mejor vas, y aun mas en fin de
   // semana). Se colocan siempre FUERA del ancho del tablero para no estorbar nunca la
-  // camara ni la jugada. ----
+  // camara ni la jugada. Gradas ESCALONADAS de verdad (cada fila mas alta y mas atras que
+  // la anterior, como una grada real) en vez de una plataforma plana. ----
   const STADIUM_MATERIAL_COLORS = [0xa9764a, 0x8a8a85, 0x3f6b8f, 0xc98a2e];
   const STAND_MAX_SEATS_PER_SIDE = 100; // 200 asientos totales repartidos entre los 2 lados
-  const STAND_DEPTH = 14;
-  const STAND_HEIGHT = 9;
+  const STAND_ROWS = 4;
+  const STAND_ROW_DEPTH = 4.5; // ancho (en X) de cada escalon
+  const STAND_ROW_HEIGHTS = [4, 7.5, 11, 14.5]; // altura de cada escalon, creciendo hacia atras
   const STAND_MARGIN = 6; // separacion respecto al borde del tablero
-  const STAND_X_LEFT = -(bottomHalf + STAND_MARGIN + STAND_DEPTH / 2);
-  const STAND_X_RIGHT = bottomHalf + STAND_MARGIN + STAND_DEPTH / 2;
 
   const standGroup = new THREE.Group();
   scene.add(standGroup);
 
-  const standMatL = new THREE.MeshStandardMaterial({ color: STADIUM_MATERIAL_COLORS[0], roughness: 0.85 });
-  const standMatR = new THREE.MeshStandardMaterial({ color: STADIUM_MATERIAL_COLORS[0], roughness: 0.85 });
-  const standGeo = new THREE.BoxGeometry(STAND_DEPTH, STAND_HEIGHT, 1); // longitud (Z) se escala en updateStadiumVisual
-  const standMeshL = new THREE.Mesh(standGeo, standMatL);
-  const standMeshR = new THREE.Mesh(standGeo, standMatR);
-  standMeshL.castShadow = standMeshL.receiveShadow = true;
-  standMeshR.castShadow = standMeshR.receiveShadow = true;
-  standMeshL.visible = standMeshR.visible = false;
-  standGroup.add(standMeshL, standMeshR);
+  // 4 escalones x 2 lados = 8 bloques fijos, solo se reescala su longitud (Z) y se
+  // recolorea segun el material actual - barato y da una silueta de grada real
+  const standRowMeshes = [];
+  for (let side = 0; side < 2; side++) {
+    const sign = side === 0 ? -1 : 1;
+    for (let row = 0; row < STAND_ROWS; row++) {
+      const rowHeight = STAND_ROW_HEIGHTS[row];
+      const geo = new THREE.BoxGeometry(STAND_ROW_DEPTH, rowHeight, 1);
+      const mat = new THREE.MeshStandardMaterial({ color: STADIUM_MATERIAL_COLORS[0], roughness: 0.85 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = mesh.receiveShadow = true;
+      mesh.visible = false;
+      mesh.userData.xCenter = sign * (bottomHalf + STAND_MARGIN + (row + 0.5) * STAND_ROW_DEPTH);
+      mesh.userData.rowHeight = rowHeight;
+      mesh.userData.row = row;
+      standGroup.add(mesh);
+      standRowMeshes.push(mesh);
+    }
+  }
 
+  // publico con forma de cuerpo (cilindro) + cabeza (esfera) en vez de una simple caja -
+  // dos InstancedMesh que comparten indice de instancia (misma persona = mismo indice en
+  // ambos), barato de renderizar hasta 200 personas
   const STADIUM_MAX_PEOPLE = 200;
-  const PERSON_COLORS = [0xd8442e, 0xe8b23a, 0x3b7dc9, 0x4f9e5c, 0xf3e2c0, 0x8a5c34, 0xffffff];
-  const personGeo = new THREE.BoxGeometry(1.6, 2.6, 1.4);
-  const personMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
-  const peopleMesh = new THREE.InstancedMesh(personGeo, personMat, STADIUM_MAX_PEOPLE);
-  peopleMesh.castShadow = true;
-  peopleMesh.count = 0;
-  standGroup.add(peopleMesh);
+  const CLOTHES_COLORS = [0xd8442e, 0xe8b23a, 0x3b7dc9, 0x4f9e5c, 0xf3e2c0, 0x8a5c34, 0xffffff, 0x7a3ba0];
+  const SKIN_COLORS = [0xf0c8a0, 0xd8a878, 0xb87d4e, 0x8a5a34, 0x5c3a20];
+  const bodyGeo = new THREE.CylinderGeometry(0.55, 0.68, 1.6, 6);
+  const headGeo = new THREE.SphereGeometry(0.42, 8, 6);
+  const bodyMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
+  const headMat = new THREE.MeshStandardMaterial({ roughness: 0.85 });
+  const peopleBodyMesh = new THREE.InstancedMesh(bodyGeo, bodyMat, STADIUM_MAX_PEOPLE);
+  const peopleHeadMesh = new THREE.InstancedMesh(headGeo, headMat, STADIUM_MAX_PEOPLE);
+  peopleBodyMesh.castShadow = peopleHeadMesh.castShadow = true;
+  peopleBodyMesh.count = peopleHeadMesh.count = 0;
+  standGroup.add(peopleBodyMesh, peopleHeadMesh);
 
   // seatsBuilt: asientos ya construidos (0-200) - materialTier: 1 madera..4 premium -
   // occupancyFraction: 0-1, cuanta gente del aforo actual esta sentada hoy
   function updateStadiumVisual(seatsBuilt, materialTier, occupancyFraction) {
     const color = STADIUM_MATERIAL_COLORS[Math.max(0, Math.min(3, (materialTier || 1) - 1))];
-    standMatL.color.setHex(color);
-    standMatR.color.setHex(color);
-
-    const seatsPerSide = (seatsBuilt || 0) / 2;
-    const lenFraction = Math.min(1, seatsPerSide / STAND_MAX_SEATS_PER_SIDE);
+    const seatsPerSideInt = Math.floor((seatsBuilt || 0) / 2);
+    const lenFraction = Math.min(1, seatsPerSideInt / STAND_MAX_SEATS_PER_SIDE);
     const standLength = BOARD.length * lenFraction;
-    const yPos = STAND_HEIGHT / 2;
     const zPos = -standLength / 2;
 
-    [[standMeshL, STAND_X_LEFT], [standMeshR, STAND_X_RIGHT]].forEach(([mesh, x]) => {
+    standRowMeshes.forEach(mesh => {
+      mesh.material.color.setHex(color);
       mesh.visible = standLength > 0.5;
       mesh.scale.z = Math.max(0.001, standLength);
-      mesh.position.set(x, yPos, zPos);
+      mesh.position.set(mesh.userData.xCenter, mesh.userData.rowHeight / 2, zPos);
     });
 
-    // gente en cuadricula (varias filas de profundidad) en vez de esparcida al azar por
-    // toda la grada - así al 100% de aforo se ve realmente llena, no un puñado de gente
-    // perdida en un asiento enorme (feedback del usuario: "cabrían el doble ahí")
-    const STAND_ROWS = 4;
-    const dummy = new THREE.Object3D();
-    const c = new THREE.Color();
+    // gente en cuadricula (una fila fisica por escalon) en vez de esparcida al azar - asi
+    // al 100% de aforo se ve realmente llena, no un puñado de gente perdida en un asiento
+    // enorme (feedback del usuario), y cada persona se apoya en su escalon real
+    const dummyBody = new THREE.Object3D();
+    const dummyHead = new THREE.Object3D();
+    const clothes = new THREE.Color();
+    const skin = new THREE.Color();
     let instanceIdx = 0;
-    [STAND_X_LEFT, STAND_X_RIGHT].forEach(sideX => {
-      const seatsPerSideInt = Math.floor((seatsBuilt || 0) / 2);
+    [-1, 1].forEach(sign => {
       if (seatsPerSideInt <= 0 || standLength <= 0) return;
       const cols = Math.max(1, Math.ceil(seatsPerSideInt / STAND_ROWS));
       const colSpacing = standLength / cols;
-      const rowSpacing = (STAND_DEPTH - 2) / Math.max(1, STAND_ROWS - 1);
       const slots = [];
       for (let col = 0; col < cols && slots.length < seatsPerSideInt; col++) {
         for (let row = 0; row < STAND_ROWS && slots.length < seatsPerSideInt; row++) {
@@ -2788,20 +2801,33 @@
       const attendanceSide = Math.max(0, Math.min(seatsPerSideInt, Math.round((occupancyFraction || 0) * seatsPerSideInt)));
       for (let i = 0; i < attendanceSide && instanceIdx < STADIUM_MAX_PEOPLE; i++) {
         const slot = slots[i];
+        const rowHeight = STAND_ROW_HEIGHTS[slot.row];
+        const xCenter = sign * (bottomHalf + STAND_MARGIN + (slot.row + 0.5) * STAND_ROW_DEPTH);
+        const x = xCenter + (Math.random() - 0.5) * (STAND_ROW_DEPTH - 1.2);
         const z = -(slot.col + 0.5) * colSpacing;
-        const x = sideX - (STAND_DEPTH - 2) / 2 + slot.row * rowSpacing;
-        dummy.position.set(x, STAND_HEIGHT + 1.4, z);
-        dummy.rotation.y = Math.random() * Math.PI * 2;
-        dummy.updateMatrix();
-        peopleMesh.setMatrixAt(instanceIdx, dummy.matrix);
-        c.setHex(PERSON_COLORS[Math.floor(Math.random() * PERSON_COLORS.length)]);
-        peopleMesh.setColorAt(instanceIdx, c);
+        const rotY = Math.random() * Math.PI * 2;
+
+        dummyBody.position.set(x, rowHeight + 0.8, z);
+        dummyBody.rotation.set(0, rotY, 0);
+        dummyBody.updateMatrix();
+        peopleBodyMesh.setMatrixAt(instanceIdx, dummyBody.matrix);
+        clothes.setHex(CLOTHES_COLORS[Math.floor(Math.random() * CLOTHES_COLORS.length)]);
+        peopleBodyMesh.setColorAt(instanceIdx, clothes);
+
+        dummyHead.position.set(x, rowHeight + 1.6 + 0.42, z);
+        dummyHead.rotation.set(0, rotY, 0);
+        dummyHead.updateMatrix();
+        peopleHeadMesh.setMatrixAt(instanceIdx, dummyHead.matrix);
+        skin.setHex(SKIN_COLORS[Math.floor(Math.random() * SKIN_COLORS.length)]);
+        peopleHeadMesh.setColorAt(instanceIdx, skin);
+
         instanceIdx++;
       }
     });
-    peopleMesh.count = instanceIdx;
-    peopleMesh.instanceMatrix.needsUpdate = true;
-    if (peopleMesh.instanceColor) peopleMesh.instanceColor.needsUpdate = true;
+    peopleBodyMesh.count = peopleHeadMesh.count = instanceIdx;
+    peopleBodyMesh.instanceMatrix.needsUpdate = peopleHeadMesh.instanceMatrix.needsUpdate = true;
+    if (peopleBodyMesh.instanceColor) peopleBodyMesh.instanceColor.needsUpdate = true;
+    if (peopleHeadMesh.instanceColor) peopleHeadMesh.instanceColor.needsUpdate = true;
   }
 
   // consulta el estadio del jugador (asientos, material, y su ocupacion segun la
