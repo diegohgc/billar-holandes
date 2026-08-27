@@ -206,6 +206,7 @@
     <span id="curPlayerName" class="big">-</span><br>
     <span data-i18n="round">Tanda</span> <span id="roundNum">1</span>/3 · <span data-i18n="discs">Fichas</span>: <span id="shotsLeft">20</span>
     <div id="reserve"></div>
+    <div id="gameHudStadium" style="display:none; font-size:12px; color:#ffcf7a; margin-top:2px; white-space:nowrap;"></div>
   </div>
   <div class="box" style="text-align:right; display:flex; flex-direction:column; align-items:flex-end;">
     <span style="white-space:nowrap;"><span data-i18n="points">Puntos</span>: <span id="curScore" class="big">0</span></span>
@@ -1771,6 +1772,16 @@
     curScoreEl.textContent = p.score;
     updateTrayDiscs();
 
+    // monedas + division de liga, solo en partidas online (dato ya cargado por
+    // loadStadiumVisualData, no hace falta otra consulta aqui)
+    const stadiumHudEl = document.getElementById('gameHudStadium');
+    if (isOnlineSoloMatch && hudCoins != null) {
+      stadiumHudEl.style.display = 'block';
+      stadiumHudEl.textContent = '🪙 ' + hudCoins + (hudDivision ? ' · ' + t('leagueDivisionN', { n: hudDivision }) : '');
+    } else {
+      stadiumHudEl.style.display = 'none';
+    }
+
     // en partida online rellenamos el hueco oscuro por encima del tablero con la bandera,
     // el nombre y la puntuación del jugador en grande - en local no aplica (no hay país)
     const badge = document.getElementById('onlineHudBadge');
@@ -3021,13 +3032,18 @@
   // clasificacion de liga de esta semana) y actualiza la mesa 3D - se llama al iniciar
   // sesion, tras comprar packs/reformas, y al terminar una partida online
   async function loadStadiumVisualData() {
-    if (!currentSession) { updateStadiumVisual(0, 1, 0); return; }
-    const { data: profile } = await sb.from('profiles').select('seats_built, material_tier, league_division, name, country')
+    if (!currentSession) { updateStadiumVisual(0, 1, 0); hudCoins = hudDivision = null; return; }
+    const { data: profile } = await sb.from('profiles').select('seats_built, material_tier, league_division, name, country, coins')
       .eq('id', currentSession.user.id).maybeSingle();
-    if (!profile) { updateStadiumVisual(0, 1, 0); return; }
+    if (!profile) { updateStadiumVisual(0, 1, 0); hudCoins = hudDivision = null; return; }
     const occupancy = await computeLeagueOccupancy(profile.league_division, currentSession.user.id);
     updateStadiumVisual(profile.seats_built || 0, profile.material_tier || 1, occupancy, profile.name, profile.country);
+    // guardados aparte para el HUD de la partida (ver refreshHud) - se pintan solo en
+    // partidas online, junto al resto del marcador
+    hudCoins = profile.coins;
+    hudDivision = profile.league_division;
   }
+  let hudCoins = null, hudDivision = null;
 
   // mini vista 2D (canvas, no 3D) de un estadio - se usa tanto en "Mi Estadio" como en el
   // perfil de otro jugador desde la clasificacion, para no montar una segunda escena 3D
