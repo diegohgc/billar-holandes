@@ -1309,7 +1309,7 @@
         try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { ctx = null; }
       }
       if (ctx && ctx.state === 'suspended') ctx.resume();
-      if (ctx) startMusic();
+      if (ctx) { startMusic(); getCheerBuffer(); } // precarga el mp3 de la ovacion del SET cuanto antes
       return ctx;
     }
 
@@ -1521,46 +1521,42 @@
     // segundos, mas fuerte e intenso cuanta mas gente haya (0..1) - sin aplausos, se
     // probaron varias versiones de aplauso sintetico y ninguna sonaba bien (a "petardeo"),
     // el usuario prefirio quedarse solo con el murmullo/vitores que si sonaba realista
+    // celebracion del SET: grabacion real de publico (audio/crowd-cheer.mp3, elegida y
+    // recortada a mano con el usuario) en vez de la voz sintetizada de antes - se carga una
+    // sola vez (fetch + decodeAudioData) y se reutiliza el mismo buffer decodificado en
+    // cada SET. El volumen y el brillo (filtro paso-bajo) escalan con el aforo real de esa
+    // partida (0..1): con poca gente suena flojo y apagado, con el estadio lleno suena a
+    // todo volumen y nitido - no podemos "añadir mas gente" a una grabacion fija, asi que
+    // esta es la forma de que igualmente se note la diferencia de afluencia.
+    let cheerBufferPromise = null;
+    function getCheerBuffer() {
+      if (!cheerBufferPromise) {
+        cheerBufferPromise = fetch('audio/crowd-cheer.mp3')
+          .then(r => r.arrayBuffer())
+          .then(ab => ctx.decodeAudioData(ab))
+          .catch(e => { console.error('crowd-cheer.mp3 load failed:', e); cheerBufferPromise = null; return null; });
+      }
+      return cheerBufferPromise;
+    }
     function crowdCheer(level) {
       const c = ctx; if (!c || !enabled) return;
       const v = Math.max(0, Math.min(1, level || 0));
       if (v < 0.05) return;
-      const now = c.currentTime;
-      const CELEBRATION_DURATION = 5;
-
-      // varias voces superpuestas ("¡oooooh!") que entran casi a la vez (reaccion conjunta
-      // al SET) y luego se apagan de forma escalonada, cada una con su propia subida/caida
-      // de volumen y un vibrato lento en el filtro
-      const numVoices = Math.round(7 + v * 8);
-      for (let i = 0; i < numVoices; i++) {
-        const startT = now + Math.random() * 0.35;
-        const dur = 3 + Math.random() * 2.4;
-        const endT = Math.min(startT + dur, now + CELEBRATION_DURATION);
-        const voiceDur = Math.max(0.4, endT - startT);
-        const nb = c.createBufferSource();
-        const buf = c.createBuffer(1, Math.floor(c.sampleRate * voiceDur), c.sampleRate);
-        const d = buf.getChannelData(0);
-        let last = 0;
-        for (let j = 0; j < d.length; j++) { const w = Math.random() * 2 - 1; last = (last + 0.06 * w) / 1.06; d[j] = last * 3; }
-        nb.buffer = buf;
-        const baseFreq = 500 + Math.random() * 700;
-        const bp = c.createBiquadFilter();
-        bp.type = 'bandpass';
-        bp.frequency.value = baseFreq;
-        bp.Q.value = 3 + Math.random() * 3;
-        // vibrato lento de la voz (leve subida y bajada de tono, como un "¡eeeeh!")
-        const lfo = c.createOscillator(); lfo.frequency.value = 3 + Math.random() * 2;
-        const lfoGain = c.createGain(); lfoGain.gain.value = baseFreq * 0.12;
-        lfo.connect(lfoGain).connect(bp.frequency);
-        lfo.start(startT); lfo.stop(startT + voiceDur);
-        const g = c.createGain();
-        const peak = (0.10 + Math.random() * 0.08) * v;
-        g.gain.setValueAtTime(0.0001, startT);
-        g.gain.linearRampToValueAtTime(peak, startT + voiceDur * 0.3);
-        g.gain.exponentialRampToValueAtTime(0.0001, startT + voiceDur);
-        nb.connect(bp).connect(g).connect(c.destination);
-        nb.start(startT);
-      }
+      getCheerBuffer().then(buffer => {
+        if (!buffer || !ctx || !enabled) return;
+        const now = ctx.currentTime;
+        const nb = ctx.createBufferSource();
+        nb.buffer = buffer;
+        // con poco publico suena mas apagado (menos agudos) ademas de mas flojo, como si
+        // llegara desde mas lejos / entre menos gente
+        const lp = ctx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.value = 900 + v * 8000;
+        const g = ctx.createGain();
+        g.gain.value = 0.25 + v * 0.75;
+        nb.connect(lp).connect(g).connect(ctx.destination);
+        nb.start(now);
+      });
     }
     return {
       ensure, knock, score, launch, setDone, setSlide, setCrowdLevel, crowdCheer,
