@@ -2761,23 +2761,45 @@
       mesh.position.set(x, yPos, zPos);
     });
 
-    const attendance = Math.max(0, Math.min(seatsBuilt || 0, Math.round((occupancyFraction || 0) * (seatsBuilt || 0))));
-    peopleMesh.count = attendance;
-    if (attendance > 0) {
-      const dummy = new THREE.Object3D();
-      const c = new THREE.Color();
-      for (let i = 0; i < attendance; i++) {
-        const x0 = i % 2 === 0 ? STAND_X_LEFT : STAND_X_RIGHT;
-        const z = -Math.random() * standLength;
-        const x = x0 + (Math.random() - 0.5) * (STAND_DEPTH - 2);
+    // gente en cuadricula (varias filas de profundidad) en vez de esparcida al azar por
+    // toda la grada - así al 100% de aforo se ve realmente llena, no un puñado de gente
+    // perdida en un asiento enorme (feedback del usuario: "cabrían el doble ahí")
+    const STAND_ROWS = 4;
+    const dummy = new THREE.Object3D();
+    const c = new THREE.Color();
+    let instanceIdx = 0;
+    [STAND_X_LEFT, STAND_X_RIGHT].forEach(sideX => {
+      const seatsPerSideInt = Math.floor((seatsBuilt || 0) / 2);
+      if (seatsPerSideInt <= 0 || standLength <= 0) return;
+      const cols = Math.max(1, Math.ceil(seatsPerSideInt / STAND_ROWS));
+      const colSpacing = standLength / cols;
+      const rowSpacing = (STAND_DEPTH - 2) / Math.max(1, STAND_ROWS - 1);
+      const slots = [];
+      for (let col = 0; col < cols && slots.length < seatsPerSideInt; col++) {
+        for (let row = 0; row < STAND_ROWS && slots.length < seatsPerSideInt; row++) {
+          slots.push({ col, row });
+        }
+      }
+      // baraja los huecos para que la gente sentada no salga siempre agrupada al principio
+      for (let i = slots.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [slots[i], slots[j]] = [slots[j], slots[i]];
+      }
+      const attendanceSide = Math.max(0, Math.min(seatsPerSideInt, Math.round((occupancyFraction || 0) * seatsPerSideInt)));
+      for (let i = 0; i < attendanceSide && instanceIdx < STADIUM_MAX_PEOPLE; i++) {
+        const slot = slots[i];
+        const z = -(slot.col + 0.5) * colSpacing;
+        const x = sideX - (STAND_DEPTH - 2) / 2 + slot.row * rowSpacing;
         dummy.position.set(x, STAND_HEIGHT + 1.4, z);
         dummy.rotation.y = Math.random() * Math.PI * 2;
         dummy.updateMatrix();
-        peopleMesh.setMatrixAt(i, dummy.matrix);
+        peopleMesh.setMatrixAt(instanceIdx, dummy.matrix);
         c.setHex(PERSON_COLORS[Math.floor(Math.random() * PERSON_COLORS.length)]);
-        peopleMesh.setColorAt(i, c);
+        peopleMesh.setColorAt(instanceIdx, c);
+        instanceIdx++;
       }
-    }
+    });
+    peopleMesh.count = instanceIdx;
     peopleMesh.instanceMatrix.needsUpdate = true;
     if (peopleMesh.instanceColor) peopleMesh.instanceColor.needsUpdate = true;
   }
