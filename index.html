@@ -2245,6 +2245,7 @@
       p.attemptFilled = [false, false, false, false];
       Sound.setDone();
       if (isOnlineSoloMatch) Sound.crowdCheer(hudCrowdFraction); // el publico anima mas cuanto mas lleno esta el estadio
+      triggerCrowdCelebration(); // la grada salta de alegria, en local y online (se ve el estadio congelado en local tambien)
       Haptics.buzz([25, 40, 25]);
       flashSet();
       spawnSetConfetti();
@@ -2939,11 +2940,13 @@
   // grada completa (200) y 4 filas, a densidad realista caben unas 800 personas - se
   // renderizan como maximo esas, muy barato via InstancedMesh (1 sola llamada de dibujo)
   const STADIUM_MAX_PEOPLE = 800;
-  const PERSON_SPACING_Z = 2.3; // separacion entre columnas de gente, fija, NO depende de cuantos asientos tengas comprados
+  const PERSON_SPACING_Z = 2.8; // separacion entre columnas de gente, fija, NO depende de cuantos asientos tengas comprados
   const CLOTHES_COLORS = [0xd8442e, 0xe8b23a, 0x3b7dc9, 0x4f9e5c, 0xf3e2c0, 0x8a5c34, 0xffffff, 0x7a3ba0];
   const SKIN_COLORS = [0xf0c8a0, 0xd8a878, 0xb87d4e, 0x8a5a34, 0x5c3a20];
-  const bodyGeo = new THREE.CylinderGeometry(0.72, 0.88, 2.05, 6); // un poco mas grandes, pedido por el usuario
-  const headGeo = new THREE.SphereGeometry(0.56, 8, 6);
+  const BODY_HEIGHT = 2.55; // mas grandes otra vez, pedido por el usuario ("sigo viendo las personas muy pequeñas")
+  const HEAD_RADIUS = 0.72;
+  const bodyGeo = new THREE.CylinderGeometry(0.95, 1.15, BODY_HEIGHT, 6);
+  const headGeo = new THREE.SphereGeometry(HEAD_RADIUS, 8, 6);
   const bodyMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
   const headMat = new THREE.MeshStandardMaterial({ roughness: 0.85 });
   const peopleBodyMesh = new THREE.InstancedMesh(bodyGeo, bodyMat, STADIUM_MAX_PEOPLE);
@@ -3014,6 +3017,49 @@
   // seatsBuilt: asientos ya construidos (0-200) - materialTier: 1 madera..4 premium -
   // occupancyFraction: 0-1, cuanta gente del aforo actual esta sentada hoy - playerName/
   // countryCode: para la pancarta y las banderitas del publico
+  // celebracion visual del publico al completar un SET: saltan de alegria durante un par de
+  // segundos. Se guarda la posicion base de cada persona (crowdBaseX/Y/Z/RotY/Phase, ver
+  // updateStadiumVisual) para poder desplazarla hacia arriba con un rebote y luego devolverla
+  // a su sitio, sin tener que reconstruir toda la grada.
+  let crowdCount = 0;
+  const crowdBaseX = [], crowdBaseY = [], crowdBaseZ = [], crowdRotY = [], crowdPhase = [];
+  let crowdCelebrationT = null;
+  const CROWD_CELEBRATION_DURATION = 2.2;
+  function triggerCrowdCelebration() {
+    if (crowdCount > 0) crowdCelebrationT = 0;
+  }
+  function updateCrowdCelebration(dt) {
+    if (crowdCelebrationT === null) return;
+    crowdCelebrationT += dt;
+    const finished = crowdCelebrationT >= CROWD_CELEBRATION_DURATION;
+    const t = Math.min(crowdCelebrationT, CROWD_CELEBRATION_DURATION);
+    const dummyBody = new THREE.Object3D();
+    const dummyHead = new THREE.Object3D();
+    for (let i = 0; i < crowdCount; i++) {
+      const rowHeight = crowdBaseY[i];
+      const x = crowdBaseX[i], z = crowdBaseZ[i], rotY = crowdRotY[i];
+      let jump = 0;
+      if (!finished) {
+        // salto tipo rebote: solo hacia arriba (nunca por debajo de su sitio), con una fase
+        // distinta por persona para que no salten todos en perfecta sincronia robotica, y
+        // una envolvente que decae hacia el final de la celebracion
+        const envelope = 1 - t / CROWD_CELEBRATION_DURATION;
+        jump = Math.max(0, Math.sin((t + crowdPhase[i]) * 8)) * 1.3 * envelope;
+      }
+      dummyBody.position.set(x, rowHeight + BODY_HEIGHT / 2 + jump, z);
+      dummyBody.rotation.set(0, rotY, 0);
+      dummyBody.updateMatrix();
+      peopleBodyMesh.setMatrixAt(i, dummyBody.matrix);
+
+      dummyHead.position.set(x, rowHeight + BODY_HEIGHT + HEAD_RADIUS + jump, z);
+      dummyHead.rotation.set(0, rotY, 0);
+      dummyHead.updateMatrix();
+      peopleHeadMesh.setMatrixAt(i, dummyHead.matrix);
+    }
+    peopleBodyMesh.instanceMatrix.needsUpdate = peopleHeadMesh.instanceMatrix.needsUpdate = true;
+    if (finished) crowdCelebrationT = null;
+  }
+
   function updateStadiumVisual(seatsBuilt, materialTier, occupancyFraction, playerName, countryCode) {
     const color = STADIUM_MATERIAL_COLORS[Math.max(0, Math.min(3, (materialTier || 1) - 1))];
     const seatsPerSideInt = Math.floor((seatsBuilt || 0) / 2);
@@ -3043,6 +3089,7 @@
     flagMat.needsUpdate = true;
     let instanceIdx = 0;
     let flagIdx = 0;
+    crowdBaseX.length = crowdBaseY.length = crowdBaseZ.length = crowdRotY.length = crowdPhase.length = 0;
     [-1, 1].forEach(sign => {
       if (standLength <= 0) return;
       const cols = Math.max(1, Math.floor(standLength / PERSON_SPACING_Z));
@@ -3068,24 +3115,33 @@
         const z = -(slot.col + 0.5) * colSpacing;
         const rotY = Math.random() * Math.PI * 2;
 
-        dummyBody.position.set(x, rowHeight + 1.03, z);
+        dummyBody.position.set(x, rowHeight + BODY_HEIGHT / 2, z);
         dummyBody.rotation.set(0, rotY, 0);
         dummyBody.updateMatrix();
         peopleBodyMesh.setMatrixAt(instanceIdx, dummyBody.matrix);
         clothes.setHex(CLOTHES_COLORS[Math.floor(Math.random() * CLOTHES_COLORS.length)]);
         peopleBodyMesh.setColorAt(instanceIdx, clothes);
 
-        dummyHead.position.set(x, rowHeight + 2.05 + 0.56, z);
+        dummyHead.position.set(x, rowHeight + BODY_HEIGHT + HEAD_RADIUS, z);
         dummyHead.rotation.set(0, rotY, 0);
         dummyHead.updateMatrix();
         peopleHeadMesh.setMatrixAt(instanceIdx, dummyHead.matrix);
         skin.setHex(SKIN_COLORS[Math.floor(Math.random() * SKIN_COLORS.length)]);
         peopleHeadMesh.setColorAt(instanceIdx, skin);
 
+        // guardamos la posicion base de esta persona para poder animarla saltando cuando se
+        // complete un SET (ver triggerCrowdCelebration/updateCrowdCelebration) sin tener que
+        // recalcular toda la grada
+        crowdBaseX[instanceIdx] = x;
+        crowdBaseY[instanceIdx] = rowHeight;
+        crowdBaseZ[instanceIdx] = z;
+        crowdRotY[instanceIdx] = rotY;
+        crowdPhase[instanceIdx] = Math.random() * 0.5;
+
         // 1 de cada FLAG_EVERY_N asistentes lleva la banderita del pais del jugador,
         // tumbada boca arriba junto a el (misma tecnica que los rotulos de puntuacion)
         if (flagTex && instanceIdx % FLAG_EVERY_N === 0 && flagIdx < STADIUM_MAX_PEOPLE) {
-          dummyFlag.position.set(x + (sign * 0.9), rowHeight + 2.1, z);
+          dummyFlag.position.set(x + (sign * 0.9), rowHeight + BODY_HEIGHT + 0.15, z);
           // orientacion FIJA (no la aleatoria de la persona) para que la bandera se lea
           // siempre igual, tumbada boca arriba igual que la pancarta
           dummyFlag.rotation.set(-Math.PI / 2, 0, Math.PI / 2);
@@ -3098,6 +3154,7 @@
       }
     });
     peopleBodyMesh.count = peopleHeadMesh.count = instanceIdx;
+    crowdCount = instanceIdx;
     peopleBodyMesh.instanceMatrix.needsUpdate = peopleHeadMesh.instanceMatrix.needsUpdate = true;
     if (peopleBodyMesh.instanceColor) peopleBodyMesh.instanceColor.needsUpdate = true;
     if (peopleHeadMesh.instanceColor) peopleHeadMesh.instanceColor.needsUpdate = true;
@@ -3772,6 +3829,7 @@
     updateCamera(dt);
     updateDust(dt);
     updateConfetti(dt);
+    updateCrowdCelebration(dt);
 
     renderer.render(scene, camera);
     requestAnimationFrame(frame);
