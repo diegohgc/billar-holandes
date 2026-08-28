@@ -3170,12 +3170,29 @@
     flagMesh.count = flagIdx;
     flagMesh.instanceMatrix.needsUpdate = true;
 
-    // pancarta con el nombre, tumbada sobre el escalon mas alto del lado izquierdo,
-    // centrada en lo que llevas construido - solo si hay nombre y algo de grada ya
-    // pancarta "¡VAMOS {nombre}!" quitada (al usuario no le convencia como quedaba) - se
-    // deja bannerMesh siempre oculta; si mas adelante se quiere retomar en otra ubicacion,
-    // la logica de textura (ensureBannerTexture) sigue mas abajo sin usarse
-    bannerMesh.visible = false;
+    // pancarta "¡VAMOS {nombre}!" - version definitiva aprobada el 2026-08-28: valla baja
+    // tipo estadio de futbol, a nivel de suelo, corriendo por delante de la fila 0 (la mas
+    // baja) de la grada izquierda - NO colgada en lo alto ni tumbada boca arriba (versiones
+    // descartadas antes de esta). Se centra en la longitud de grada ya CONSTRUIDA (zPos, el
+    // mismo valor que usan las filas de grada mas arriba), asi que si el jugador tiene poca
+    // grada la pancarta no se sale de ella.
+    //
+    // TODO (pendiente de la tienda de cosmeticos): esto sera un articulo de pago (ver diseño
+    // hablado el 2026-08-28, categoria "Estadio", ~50 monedas). Por ahora se deja siempre
+    // oculta (hasBannerItem = false) hasta que exista la columna equipped_stadium_banner en
+    // profiles y la logica de compra/equipar - cuando se implemente, sustituir esa constante
+    // por la comprobacion real (ej. `profile.equipped_stadium_banner`).
+    const hasBannerItem = false; // placeholder: nadie la tiene todavia, no existe la tienda
+    const BANNER_MIN_STAND_LENGTH = 30; // hace falta al menos esto de grada construida para que quepa
+    if (playerName && hasBannerItem && standLength >= BANNER_MIN_STAND_LENGTH) {
+      ensureBannerTexture(t('cheerBanner', { name: playerName }));
+      bannerMesh.scale.set(30, 4, 1);
+      bannerMesh.position.set(-24, 2.2, zPos);
+      bannerMesh.rotation.set(0, Math.PI / 2, 0);
+      bannerMesh.visible = true;
+    } else {
+      bannerMesh.visible = false;
+    }
   }
 
   // aforo real (0-1) de un jugador segun su posicion en su division de liga esta semana +
