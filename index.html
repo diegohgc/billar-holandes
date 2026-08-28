@@ -822,7 +822,7 @@
     const isMine = (row) => rankType === 'players'
       ? (currentSession && row.player_id === currentSession.user.id)
       : (currentProfile && row.country === currentProfile.country);
-    const VISIBLE_ROWS = 50;
+    const VISIBLE_ROWS = 100;
     data.slice(0, VISIBLE_ROWS).forEach((row, i) => {
       const row_ = document.createElement('div');
       row_.className = 'scoreRow';
