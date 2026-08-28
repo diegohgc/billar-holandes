@@ -3024,7 +3024,7 @@
   let crowdCount = 0;
   const crowdBaseX = [], crowdBaseY = [], crowdBaseZ = [], crowdRotY = [], crowdPhase = [];
   let crowdCelebrationT = null;
-  const CROWD_CELEBRATION_DURATION = 2.2;
+  const CROWD_CELEBRATION_DURATION = 5; // igual que dura el audio de celebracion (audio/crowd-cheer.mp3)
   function triggerCrowdCelebration() {
     if (crowdCount > 0) crowdCelebrationT = 0;
   }
@@ -3043,8 +3043,11 @@
         // salto tipo rebote: solo hacia arriba (nunca por debajo de su sitio), con una fase
         // distinta por persona para que no salten todos en perfecta sincronia robotica, y
         // una envolvente que decae hacia el final de la celebracion
-        const envelope = 1 - t / CROWD_CELEBRATION_DURATION;
-        jump = Math.max(0, Math.sin((t + crowdPhase[i]) * 8)) * 1.3 * envelope;
+        // se mantiene fuerte los primeros ~60% y luego decae, en vez de apagarse desde el
+        // primer instante - dura los mismos 5s que el audio de celebracion
+        const fadeStart = CROWD_CELEBRATION_DURATION * 0.6;
+        const envelope = t <= fadeStart ? 1 : Math.max(0, 1 - (t - fadeStart) / (CROWD_CELEBRATION_DURATION - fadeStart));
+        jump = Math.max(0, Math.sin((t + crowdPhase[i]) * 5.5)) * 1.3 * envelope;
       }
       dummyBody.position.set(x, rowHeight + BODY_HEIGHT / 2 + jump, z);
       dummyBody.rotation.set(0, rotY, 0);
@@ -3163,22 +3166,10 @@
 
     // pancarta con el nombre, tumbada sobre el escalon mas alto del lado izquierdo,
     // centrada en lo que llevas construido - solo si hay nombre y algo de grada ya
-    if (playerName && standLength > 12) {
-      ensureBannerTexture(t('cheerBanner', { name: playerName.toUpperCase() }));
-      const topRow = STAND_ROWS - 1;
-      const bannerWidth = Math.min(standLength * 0.85, 65);
-      const bannerHeight = bannerWidth * (220 / 1024);
-      bannerMesh.scale.set(bannerWidth, bannerHeight, 1);
-      bannerMesh.rotation.set(-Math.PI / 2, 0, Math.PI / 2);
-      bannerMesh.position.set(
-        -1 * (bottomHalf + STAND_MARGIN + (topRow + 0.5) * STAND_ROW_DEPTH),
-        STAND_ROW_HEIGHTS[topRow] + 0.1,
-        zPos
-      );
-      bannerMesh.visible = true;
-    } else {
-      bannerMesh.visible = false;
-    }
+    // pancarta "¡VAMOS {nombre}!" quitada (al usuario no le convencia como quedaba) - se
+    // deja bannerMesh siempre oculta; si mas adelante se quiere retomar en otra ubicacion,
+    // la logica de textura (ensureBannerTexture) sigue mas abajo sin usarse
+    bannerMesh.visible = false;
   }
 
   // aforo real (0-1) de un jugador segun su posicion en su division de liga esta semana +
@@ -3219,6 +3210,9 @@
 
   // mini vista 2D (canvas, no 3D) de un estadio - se usa tanto en "Mi Estadio" como en el
   // perfil de otro jugador desde la clasificacion, para no montar una segunda escena 3D
+  // fiel a como se ve de verdad en la mesa 3D: misma proporcion de longitud construida,
+  // mismo color de material, y las mismas 4 filas escalonadas (STAND_ROWS) en vez de un
+  // bloque plano - cada fila un poco mas clara que la anterior, como los escalones reales
   function drawStadiumPreview(canvas, seatsBuilt, materialTier, occupancy) {
     const ctx = canvas.getContext('2d');
     const w = canvas.width, h = canvas.height;
@@ -3226,7 +3220,7 @@
     ctx.fillStyle = '#150c04';
     ctx.fillRect(0, 0, w, h);
     const matColors = ['#a9764a', '#8a8a85', '#3f6b8f', '#c98a2e'];
-    const color = matColors[Math.max(0, Math.min(3, (materialTier || 1) - 1))];
+    const baseColor = matColors[Math.max(0, Math.min(3, (materialTier || 1) - 1))];
     const marginY = 8;
     const usableH = h - marginY * 2;
     const seatsPerSide = (seatsBuilt || 0) / 2;
@@ -3238,24 +3232,41 @@
     ctx.fillStyle = '#5a3a1c';
     ctx.fillRect(boardX, marginY, boardW, usableH);
     const standW = (w - boardW) / 2 - 14;
-    [{ x: 6 }, { x: w - 6 - standW }].forEach(({ x }) => {
+    const ROWS = 4;
+    const rowW = standW / ROWS;
+    [{ x: 6, inward: 1 }, { x: w - 6 - standW, inward: -1 }].forEach(({ x, inward }) => {
       if (standH < 1) return;
-      ctx.fillStyle = color;
-      ctx.fillRect(x, marginY, standW, standH);
-      // puntitos de "gente" segun el aforo, densidad fija (igual criterio que en 3D)
-      const dotCols = 4, dotRowH = 5;
+      for (let row = 0; row < ROWS; row++) {
+        // fila mas cercana a la mesa (row 0, la mas baja en 3D) mas oscura, la de atras
+        // (row 3, la mas alta) mas clara - mismo orden que STAND_ROW_HEIGHTS en 3D
+        const shade = 0.72 + row * 0.12;
+        ctx.fillStyle = shadeHexColor(baseColor, shade);
+        const rx = inward === 1 ? x + row * rowW : x + standW - (row + 1) * rowW;
+        ctx.fillRect(rx, marginY, rowW - 1, standH);
+      }
+      // puntitos de "gente" repartidos en las 4 filas, densidad segun el aforo (igual
+      // criterio que en 3D: cada fila puede llenarse independientemente)
+      const dotRowH = 6;
       const rows = Math.max(1, Math.floor(standH / dotRowH));
       for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < dotCols; c++) {
+        for (let row = 0; row < ROWS; row++) {
           if (Math.random() < (occupancy || 0)) {
             ctx.fillStyle = CLOTHES_COLORS_HEX[Math.floor(Math.random() * CLOTHES_COLORS_HEX.length)];
+            const rx = inward === 1 ? x + row * rowW : x + standW - (row + 1) * rowW;
             ctx.beginPath();
-            ctx.arc(x + 3 + c * (standW - 6) / (dotCols - 1), marginY + 3 + r * dotRowH, 1.6, 0, Math.PI * 2);
+            ctx.arc(rx + rowW / 2, marginY + 3 + r * dotRowH, 1.5, 0, Math.PI * 2);
             ctx.fill();
           }
         }
       }
     });
+  }
+  function shadeHexColor(hex, mul) {
+    const n = parseInt(hex.slice(1), 16);
+    const r = Math.min(255, Math.round(((n >> 16) & 255) * mul));
+    const g = Math.min(255, Math.round(((n >> 8) & 255) * mul));
+    const b = Math.min(255, Math.round((n & 255) * mul));
+    return `rgb(${r},${g},${b})`;
   }
   const CLOTHES_COLORS_HEX = ['#d8442e', '#e8b23a', '#3b7dc9', '#4f9e5c', '#f3e2c0', '#8a5c34', '#ffffff', '#7a3ba0'];
 
