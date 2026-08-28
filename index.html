@@ -2194,6 +2194,11 @@
     detachBoardMeshes();
     boardPucks = [];
     const p = players[curPlayerIdx];
+    // porterias amarillas (attemptFilled) se reinician tambien en cada tanda nueva - antes
+    // se podian ir acumulando de tandas anteriores, lo que hacia el SET demasiado facil de
+    // conseguir a base de "ir guardando" puertas sueltas a lo largo de toda la partida.
+    // Ahora hay que completar las 4 puertas dentro de la MISMA tanda para lograr el SET.
+    p.attemptFilled = [false, false, false, false];
     shotsLeft = curRound === 1 ? DISCS_PER_PLAYER : p.remaining;
     roundEnding = false;
     spawnReadyPuck();
