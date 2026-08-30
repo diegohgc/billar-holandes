@@ -2951,8 +2951,12 @@
   const SKIN_COLORS = [0xf0c8a0, 0xd8a878, 0xb87d4e, 0x8a5a34, 0x5c3a20];
   const BODY_HEIGHT = 2.55; // mas grandes otra vez, pedido por el usuario ("sigo viendo las personas muy pequeñas")
   const HEAD_RADIUS = 0.72;
-  const bodyGeo = new THREE.CylinderGeometry(0.95, 1.15, BODY_HEIGHT, 6);
-  const headGeo = new THREE.SphereGeometry(HEAD_RADIUS, 8, 6);
+  // mas segmentos que antes (6 y 8x6) - en el movil (sobre todo dentro del WebView de la
+  // APK) el poligonaje tan bajo se veia colapsar en manchas/circulos planos en vez de
+  // gente con forma, sobre todo durante el zoom de la camara al lanzar. El coste extra es
+  // minimo: sigue siendo una sola llamada de dibujo por InstancedMesh, hasta 800 personas.
+  const bodyGeo = new THREE.CylinderGeometry(0.95, 1.15, BODY_HEIGHT, 12);
+  const headGeo = new THREE.SphereGeometry(HEAD_RADIUS, 14, 10);
   const bodyMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
   const headMat = new THREE.MeshStandardMaterial({ roughness: 0.85 });
   const peopleBodyMesh = new THREE.InstancedMesh(bodyGeo, bodyMat, STADIUM_MAX_PEOPLE);
