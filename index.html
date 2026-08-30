@@ -2969,7 +2969,23 @@
   legsMesh.frustumCulled = false; // mismo motivo que peopleBodyMesh/peopleHeadMesh
   legsMesh.count = 0;
 
-  const bodyGeo = new THREE.CylinderGeometry(0.95, 1.15, TORSO_HEIGHT, 12);
+  // brazos: mismo patron que las piernas, dos por persona colgando a los lados del torso.
+  // Pedido por el usuario el 2026-08-30 ("que no parezca un cilindro") junto con el cambio
+  // de cilindro a capsula en el torso - los brazos son lo que mas rompe la silueta de tubo.
+  const ARM_LENGTH = TORSO_HEIGHT * 0.8;
+  const armGeo = new THREE.CylinderGeometry(0.16, 0.19, ARM_LENGTH, 8);
+  const armMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
+  const armsMesh = new THREE.InstancedMesh(armGeo, armMat, STADIUM_MAX_PEOPLE * 2);
+  armsMesh.castShadow = true;
+  armsMesh.frustumCulled = false;
+  armsMesh.count = 0;
+
+  // torso: capsula en vez de cilindro (extremos redondeados) para que no se vea como un
+  // tubo con bordes rectos - radio uniforme, la "TORSO_HEIGHT" total se reparte entre el
+  // tramo recto central y los dos casquetes redondeados de los extremos, para que la
+  // cabeza siga apoyando exactamente donde apoyaba antes.
+  const TORSO_RADIUS = 0.62;
+  const bodyGeo = new THREE.CapsuleGeometry(TORSO_RADIUS, Math.max(0.05, TORSO_HEIGHT - TORSO_RADIUS * 2), 4, 12);
   const headGeo = new THREE.SphereGeometry(HEAD_RADIUS, 14, 10);
   const bodyMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
   const headMat = new THREE.MeshStandardMaterial({ roughness: 0.85 });
@@ -2986,7 +3002,7 @@
   // mallas fijas del propio estadio, siempre deberian estar visibles de todos modos.
   peopleBodyMesh.frustumCulled = peopleHeadMesh.frustumCulled = false;
   peopleBodyMesh.count = peopleHeadMesh.count = 0;
-  standGroup.add(peopleBodyMesh, peopleHeadMesh, legsMesh);
+  standGroup.add(peopleBodyMesh, peopleHeadMesh, legsMesh, armsMesh);
 
   // banderitas del pais del jugador, unas pocas repartidas entre el publico (1 de cada 6
   // asistentes) - una sola textura (el emoji de bandera dibujado en un canvas) reutilizada
@@ -3070,6 +3086,7 @@
     const dummyBody = new THREE.Object3D();
     const dummyHead = new THREE.Object3D();
     const dummyLeg = new THREE.Object3D();
+    const dummyArm = new THREE.Object3D();
     for (let i = 0; i < crowdCount; i++) {
       const rowHeight = crowdBaseY[i];
       const x = crowdBaseX[i], z = crowdBaseZ[i], rotY = crowdRotY[i];
@@ -3104,9 +3121,21 @@
       dummyLeg.position.set(x - legDx, rowHeight + LEG_HEIGHT / 2 + jump, z - legDz);
       dummyLeg.updateMatrix();
       legsMesh.setMatrixAt(i * 2 + 1, dummyLeg.matrix);
+
+      // brazos: mismo salto que el resto del cuerpo
+      const armDx = Math.cos(rotY) * 0.78, armDz = -Math.sin(rotY) * 0.78;
+      const armCenterY = rowHeight + LEG_HEIGHT + TORSO_HEIGHT * 0.9 - ARM_LENGTH / 2 + jump;
+      dummyArm.position.set(x + armDx, armCenterY, z + armDz);
+      dummyArm.rotation.set(0, rotY, 0);
+      dummyArm.updateMatrix();
+      armsMesh.setMatrixAt(i * 2, dummyArm.matrix);
+      dummyArm.position.set(x - armDx, armCenterY, z - armDz);
+      dummyArm.updateMatrix();
+      armsMesh.setMatrixAt(i * 2 + 1, dummyArm.matrix);
     }
     peopleBodyMesh.instanceMatrix.needsUpdate = peopleHeadMesh.instanceMatrix.needsUpdate = true;
     legsMesh.instanceMatrix.needsUpdate = true;
+    armsMesh.instanceMatrix.needsUpdate = true;
     if (finished) crowdCelebrationT = null;
   }
 
@@ -3133,6 +3162,7 @@
     const dummyHead = new THREE.Object3D();
     const dummyFlag = new THREE.Object3D();
     const dummyLeg = new THREE.Object3D();
+    const dummyArm = new THREE.Object3D();
     const clothes = new THREE.Color();
     const skin = new THREE.Color();
     const flagTex = getFlagTexture(countryCode);
@@ -3187,6 +3217,21 @@
         legsMesh.setMatrixAt(instanceIdx * 2 + 1, dummyLeg.matrix);
         legsMesh.setColorAt(instanceIdx * 2 + 1, clothes);
 
+        // brazos: dos por persona, colgando a los lados del torso desde cerca del hombro,
+        // mismo color de ropa - separacion mayor que las piernas porque el torso (capsula)
+        // es mas ancho que el hueco entre las piernas
+        const armDx = Math.cos(rotY) * 0.78, armDz = -Math.sin(rotY) * 0.78;
+        const armCenterY = rowHeight + LEG_HEIGHT + TORSO_HEIGHT * 0.9 - ARM_LENGTH / 2;
+        dummyArm.position.set(x + armDx, armCenterY, z + armDz);
+        dummyArm.rotation.set(0, rotY, 0);
+        dummyArm.updateMatrix();
+        armsMesh.setMatrixAt(instanceIdx * 2, dummyArm.matrix);
+        armsMesh.setColorAt(instanceIdx * 2, clothes);
+        dummyArm.position.set(x - armDx, armCenterY, z - armDz);
+        dummyArm.updateMatrix();
+        armsMesh.setMatrixAt(instanceIdx * 2 + 1, dummyArm.matrix);
+        armsMesh.setColorAt(instanceIdx * 2 + 1, clothes);
+
         dummyHead.position.set(x, rowHeight + BODY_HEIGHT + HEAD_RADIUS, z);
         dummyHead.rotation.set(0, rotY, 0);
         dummyHead.updateMatrix();
@@ -3226,6 +3271,9 @@
     legsMesh.count = instanceIdx * 2;
     legsMesh.instanceMatrix.needsUpdate = true;
     if (legsMesh.instanceColor) legsMesh.instanceColor.needsUpdate = true;
+    armsMesh.count = instanceIdx * 2;
+    armsMesh.instanceMatrix.needsUpdate = true;
+    if (armsMesh.instanceColor) armsMesh.instanceColor.needsUpdate = true;
     flagMesh.count = flagIdx;
     flagMesh.instanceMatrix.needsUpdate = true;
 
