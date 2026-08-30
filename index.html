@@ -2962,6 +2962,15 @@
   const peopleBodyMesh = new THREE.InstancedMesh(bodyGeo, bodyMat, STADIUM_MAX_PEOPLE);
   const peopleHeadMesh = new THREE.InstancedMesh(headGeo, headMat, STADIUM_MAX_PEOPLE);
   peopleBodyMesh.castShadow = peopleHeadMesh.castShadow = true;
+  // IMPORTANTE: un InstancedMesh calcula su volumen de "culling" (para decidir si esta
+  // dentro de la camara) a partir de la geometria base, como si solo hubiera 1 instancia
+  // en el origen - no tiene en cuenta donde coloca luego cada instancia con setMatrixAt.
+  // Con cientos de personas repartidas lejos a los lados, ese volumen calculado mal caia
+  // fuera del encuadre en cuanto la camara hacia zoom hacia la porteria, y Three.js
+  // ocultaba TODA la grada de golpe (bug reportado: "la gente desaparece en el zoom").
+  // Al desactivar el frustum culling, siempre se dibuja - coste nulo aqui porque son
+  // mallas fijas del propio estadio, siempre deberian estar visibles de todos modos.
+  peopleBodyMesh.frustumCulled = peopleHeadMesh.frustumCulled = false;
   peopleBodyMesh.count = peopleHeadMesh.count = 0;
   standGroup.add(peopleBodyMesh, peopleHeadMesh);
 
@@ -2973,6 +2982,7 @@
   const flagGeo = new THREE.PlaneGeometry(1.3, 0.9);
   const flagMat = new THREE.MeshBasicMaterial({ transparent: true, side: THREE.DoubleSide });
   const flagMesh = new THREE.InstancedMesh(flagGeo, flagMat, STADIUM_MAX_PEOPLE);
+  flagMesh.frustumCulled = false; // mismo motivo que peopleBodyMesh/peopleHeadMesh mas arriba
   flagMesh.count = 0;
   standGroup.add(flagMesh);
   const flagTextureCache = {};
