@@ -4089,17 +4089,27 @@
   // un lado del estadio y termina exactamente en la vista de reposo normal (restCamPos/Look,
   // que ya se adapta sola a portrait/landscape), asi que al terminar el barrido la camara
   // queda donde siempre - no hay que "devolverla" a ningun sitio.
-  const DRONE_INTRO_DURATION = 2.4;
+  // duracion mas larga y con una pasada rasante por el medio, pedido por el usuario el
+  // 2026-08-31 tras ver la primera version (mas corta y en linea recta) - ahora son 3 tramos:
+  // arranca bajo y a un lado (igual que antes) -> baja aun mas, casi a ras del tablero, en
+  // una pasada rasante por el centro -> sube y retrocede hasta la vista de reposo de siempre.
+  // Tambien se oye al publico "cantar" (el mismo sonido de celebracion del SET) durante el
+  // vuelo, escalado por la afluencia real del estadio igual que en onDiscScored.
+  const DRONE_INTRO_DURATION = 5;
   let droneIntroT = null;
   const droneStartPos = new THREE.Vector3();
+  const droneGroundPos = new THREE.Vector3();
   function startDroneIntro() {
     // el punto de mira NO se interpola (siempre restCamLook, el mismo centro del tablero
     // que la vista de reposo) - solo se mueve la posicion. La vista de reposo ya es bastante
     // aerea (y=340), asi que empezar aun mas alto solo empequeñece el estadio hasta perderse
     // en el cielo negro - en vez de eso, el dron arranca mas BAJO y a un lado, como si
-    // sobrevolara la entrada del estadio, y sube/retrocede hasta la vista de reposo de siempre.
+    // sobrevolara la entrada del estadio.
     droneStartPos.set(restCamPos.x + 220, 55, restCamPos.z + 230);
+    // pasada rasante: casi a nivel del tablero, cerca del centro
+    droneGroundPos.set(0, 14, -40);
     droneIntroT = 0;
+    if (isOnlineSoloMatch) Sound.crowdCheer(hudCrowdFraction);
   }
   // devuelve true mientras el barrido esta activo (para que frame() se salte updateCamera
   // ese rato) - false en cuanto termina, incluido el frame final
@@ -4107,8 +4117,13 @@
     if (droneIntroT === null) return false;
     droneIntroT += dt;
     const tt = Math.min(1, droneIntroT / DRONE_INTRO_DURATION);
-    const eased = easeInOutCubic(tt);
-    camera.position.lerpVectors(droneStartPos, restCamPos, eased);
+    if (tt < 0.5) {
+      // primera mitad: del punto de partida a la pasada rasante
+      camera.position.lerpVectors(droneStartPos, droneGroundPos, easeInOutCubic(tt / 0.5));
+    } else {
+      // segunda mitad: de la pasada rasante sube hasta la vista de reposo de siempre
+      camera.position.lerpVectors(droneGroundPos, restCamPos, easeInOutCubic((tt - 0.5) / 0.5));
+    }
     camera.lookAt(restCamLook);
     if (tt >= 1) droneIntroT = null;
     return true;
