@@ -859,6 +859,7 @@
     curPlayerIdx = 0;
     gamePhase = 'playing';
     startPlayerTurn();
+    startDroneIntro(); // barrido de camara tipo dron sobre el estadio antes de poder jugar
   }
   document.getElementById('onlinePlaySoloBtn').addEventListener('click', () => {
     if (!currentProfile) return;
@@ -3939,7 +3940,7 @@
 
   function pointerDown(clientX, clientY) {
     Sound.ensure();
-    if (gamePhase !== 'playing' || puck.state !== 'ready') return;
+    if (gamePhase !== 'playing' || puck.state !== 'ready' || droneIntroT !== null) return;
     const p = boardPointFromClient(clientX, clientY);
     if (!p) return;
     const d = Math.hypot(p.x - puck.x, p.y - puck.y);
@@ -4056,7 +4057,7 @@
     Sound.setSlide(gamePhase === 'playing' ? Math.min(1, maxSpeed / 150) : 0);
     updateShotTimer(dt);
     updateAimVisuals();
-    updateCamera(dt);
+    if (!updateDroneIntro(dt)) updateCamera(dt);
     updateDust(dt);
     updateConfetti(dt);
     updateCrowdCelebration(dt);
@@ -4080,6 +4081,37 @@
   let camTargetPuck = null;
   function easeInOutCubic(t) {
     return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+
+  // intro tipo dron: barrido de camara sobre el estadio al empezar una partida online, antes
+  // de que el jugador pueda tocar nada - pedido por el usuario el 2026-08-31, inspirado en
+  // las intros de camara aerea de las retransmisiones de futbol. Parte de un punto alto y a
+  // un lado del estadio y termina exactamente en la vista de reposo normal (restCamPos/Look,
+  // que ya se adapta sola a portrait/landscape), asi que al terminar el barrido la camara
+  // queda donde siempre - no hay que "devolverla" a ningun sitio.
+  const DRONE_INTRO_DURATION = 2.4;
+  let droneIntroT = null;
+  const droneStartPos = new THREE.Vector3();
+  function startDroneIntro() {
+    // el punto de mira NO se interpola (siempre restCamLook, el mismo centro del tablero
+    // que la vista de reposo) - solo se mueve la posicion. La vista de reposo ya es bastante
+    // aerea (y=340), asi que empezar aun mas alto solo empequeñece el estadio hasta perderse
+    // en el cielo negro - en vez de eso, el dron arranca mas BAJO y a un lado, como si
+    // sobrevolara la entrada del estadio, y sube/retrocede hasta la vista de reposo de siempre.
+    droneStartPos.set(restCamPos.x + 220, 55, restCamPos.z + 230);
+    droneIntroT = 0;
+  }
+  // devuelve true mientras el barrido esta activo (para que frame() se salte updateCamera
+  // ese rato) - false en cuanto termina, incluido el frame final
+  function updateDroneIntro(dt) {
+    if (droneIntroT === null) return false;
+    droneIntroT += dt;
+    const tt = Math.min(1, droneIntroT / DRONE_INTRO_DURATION);
+    const eased = easeInOutCubic(tt);
+    camera.position.lerpVectors(droneStartPos, restCamPos, eased);
+    camera.lookAt(restCamLook);
+    if (tt >= 1) droneIntroT = null;
+    return true;
   }
   function updateCamera(dt) {
     if (!camTargetPuck) {
