@@ -730,7 +730,14 @@
   document.getElementById('recapContinueBtn').addEventListener('click', async () => {
     const item = recapQueue.shift();
     document.getElementById('recapScreen').style.display = 'none';
-    if (item) sb.rpc('mark_recap_seen', { p_kind: item.kind, p_id: item.row.id });
+    // IMPORTANTE: sb.rpc(...) en supabase-js no envia la peticion de verdad hasta que se
+    // consume con .then()/await (es "lazy") - sin esto, la llamada se queda sin efecto y
+    // "seen" nunca se guarda como visto, aunque el codigo parezca correcto (bug real
+    // encontrado el 2026-09-01: el aviso mensual volvia a salir cada dia).
+    if (item) {
+      sb.rpc('mark_recap_seen', { p_kind: item.kind, p_id: item.row.id })
+        .then(({ error }) => { if (error) console.error('mark_recap_seen failed:', error); });
+    }
     if (recapQueue.length > 0) showNextRecap();
   });
 
