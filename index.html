@@ -411,7 +411,6 @@
       <button id="rankMetricRecord" class="ghostBtn" data-i18n="rankMetricRecord">Récord</button>
     </div>
     <div class="rankFilterRow">
-      <button id="rankScopeGeneral" class="ghostBtn" data-i18n="rankGeneral">General</button>
       <button id="rankScopeMonthly" class="ghostBtn" data-i18n="rankMonthly">Mensual</button>
       <button id="rankScopeYearly" class="ghostBtn" data-i18n="rankYearly">Anual</button>
     </div>
@@ -445,9 +444,7 @@
 <div id="onlineRankRulesScreen" class="overlay" style="display:none">
   <div class="panel">
     <h2 data-i18n="rankRulesTitle">Normas de la clasificación</h2>
-    <p data-i18n="rankRule1">La clasificación se basa en la puntuación media de tus últimas 50 partidas, no en el total ni en una sola partida.</p>
     <p data-i18n="rankRule2">Necesitas jugar unas pocas partidas antes de aparecer, para que un resultado puntual no decida tu puesto.</p>
-    <p data-i18n="rankRule3">Si pasas 7 días sin jugar ninguna partida, desapareces de la clasificación hasta que vuelvas a jugar. No se te resta puntuación, simplemente dejas de aparecer.</p>
     <p data-i18n="rankRule4">La clasificación mensual y anual se reinician automáticamente al empezar cada mes o año.</p>
     <p data-i18n="rankRule5">La clasificación por países es la media de las puntuaciones de los jugadores que representan a cada país.</p>
     <p data-i18n="rankRule6">La clasificación por "Récord" muestra tu mejor puntuación en una sola partida, sin caducar aunque no juegues durante días.</p>
@@ -892,11 +889,15 @@
     const A = 0x1F1E6;
     return String.fromCodePoint(...[...code.toUpperCase()].map(c => A + c.charCodeAt(0) - 65));
   }
-  let rankScope = 'general', rankType = 'players', rankMetric = 'avg';
+  // "General" (media de las ultimas 20 partidas, sin ciclo de calendario) se quito el
+  // 2026-09-02 a peticion del usuario: con pocos jugadores no aportaba nada distinto a la
+  // mensual, y confundia tener 4 clasificaciones parecidas. La vista ranking/ranking_countries
+  // se deja intacta en Supabase por si se quiere retomar mas adelante, solo se quita del menu.
+  let rankScope = 'monthly', rankType = 'players', rankMetric = 'avg';
   function rankViewName() {
     let base = rankType === 'players' ? 'ranking' : 'ranking_countries';
     if (rankMetric === 'record') base += '_record';
-    if (rankScope !== 'general') base += '_' + rankScope;
+    base += '_' + rankScope;
     return base;
   }
   async function loadOnlineRanking() {
@@ -1038,7 +1039,7 @@
       document.getElementById(id).style.opacity =
         id === 'rankMetric' + rankMetric.charAt(0).toUpperCase() + rankMetric.slice(1) ? '1' : '0.5';
     });
-    ['rankScopeGeneral','rankScopeMonthly','rankScopeYearly'].forEach(id => {
+    ['rankScopeMonthly','rankScopeYearly'].forEach(id => {
       document.getElementById(id).style.opacity =
         id === 'rankScope' + rankScope.charAt(0).toUpperCase() + rankScope.slice(1) ? '1' : '0.5';
     });
@@ -1299,7 +1300,6 @@
   });
   document.getElementById('rankMetricAvg').addEventListener('click', () => { rankMetric = 'avg'; setRankButtonsActive(); loadOnlineRanking(); });
   document.getElementById('rankMetricRecord').addEventListener('click', () => { rankMetric = 'record'; setRankButtonsActive(); loadOnlineRanking(); });
-  document.getElementById('rankScopeGeneral').addEventListener('click', () => { rankScope = 'general'; setRankButtonsActive(); loadOnlineRanking(); });
   document.getElementById('rankScopeMonthly').addEventListener('click', () => { rankScope = 'monthly'; setRankButtonsActive(); loadOnlineRanking(); });
   document.getElementById('rankScopeYearly').addEventListener('click', () => { rankScope = 'yearly'; setRankButtonsActive(); loadOnlineRanking(); });
   document.getElementById('rankTypePlayers').addEventListener('click', () => { rankType = 'players'; setRankButtonsActive(); loadOnlineRanking(); });
