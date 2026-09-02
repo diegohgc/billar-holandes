@@ -3456,7 +3456,13 @@
     hudCoins = profile.coins;
     hudDivision = profile.league_division;
     hudAttendance = Math.round(occupancy * (profile.seats_built || 0));
-    hudCrowdFraction = occupancy; // 0..1, para el murmullo de fondo y la ovacion del SET
+    // IMPORTANTE: el volumen del sonido (murmullo de fondo y ovacion del SET) tiene que ir
+    // segun los ESPECTADORES REALES (hudAttendance, 0-200), no segun el % de ocupacion en
+    // crudo - "occupancy" es un porcentaje de la grada que tengas construida, asi que un
+    // jugador con 0 asientos construidos podia salir con occupancy=0.9 (90% de un aforo que
+    // en realidad es 0) y sonar el estadio lleno sin haber ni una sola persona. Bug real
+    // corregido el 2026-09-02.
+    hudCrowdFraction = hudAttendance / (STAND_MAX_SEATS_PER_SIDE * 2); // 0..1 sobre el aforo TOTAL del estadio (200)
   }
   let hudCoins = null, hudDivision = null, hudAttendance = null, hudCrowdFraction = 0;
 
