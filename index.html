@@ -1889,6 +1889,7 @@
     p.vx *= ratio;
     p.vy *= ratio;
 
+    const prevX = p.x, prevY = p.y;
     p.x += p.vx * dt;
     p.y += p.vy * dt;
 
@@ -1906,13 +1907,26 @@
 
       // the gate face acts like a wall with four narrow openings: a disc only passes if it
       // is both well aligned with an opening AND carries enough speed; otherwise it is
-      // rejected straight back down the lane (this is the real source of difficulty)
-      if (p.y + p.r >= BOARD.length && p.y <= BOARD.length) {
+      // rejected straight back down the lane (this is the real source of difficulty).
+      // IMPORTANTE: en un paso grande (movil lento, dt grande) el disco puede saltar de
+      // "antes de la portera" a "ya dentro" en un solo frame, sin pasar nunca por la banda
+      // estrecha que la comprobacion de siempre miraba - eso colaba el disco sin comprobar
+      // si estaba alineado (bug real: "en moviles antiguos las fichas entran mas facil").
+      // Arreglo: en vez de mirar solo la posicion final, se comprueba si la LINEA de la
+      // porteria quedo cruzada en algun punto del trayecto de este paso (prevY -> p.y), y
+      // se calcula la x exacta en la que la cruzo por interpolacion, para que la alineacion
+      // se compruebe siempre, sea cual sea el tamaño del paso.
+      const crossedGateLine = prevY <= BOARD.length && p.y + p.r >= BOARD.length;
+      if (crossedGateLine) {
         const curSpeed = Math.hypot(p.vx, p.vy);
         const margin = p.r * 0.62; // disc centre must clear this much of the opening edges
+        // x en el instante exacto en que el centro del disco cruzo la linea de la porteria
+        // (si el paso no llega a cruzar del todo, tCross sale >1 y se usa la x actual)
+        const tCross = p.y !== prevY ? Math.min(1, Math.max(0, (BOARD.length - prevY) / (p.y - prevY))) : 1;
+        const xAtCross = prevX + (p.x - prevX) * tCross;
         let aligned = false;
         for (const s of slots) {
-          if (p.x >= s[0] + margin && p.x <= s[1] - margin) { aligned = true; break; }
+          if (xAtCross >= s[0] + margin && xAtCross <= s[1] - margin) { aligned = true; break; }
         }
         if (p.vy > 0 && (!aligned || curSpeed < BOARD.lipSpeed)) {
           if (p.vy > 20) Sound.knock(Math.min(1, p.vy / 160), 210); // rejected by the gate face
