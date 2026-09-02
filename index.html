@@ -910,7 +910,12 @@
     gapEl.style.display = 'none';
     // se pide sin limite (hasta un tope generoso) para poder localizar tu propia fila aunque
     // quedes fuera de las primeras posiciones que se muestran en pantalla
-    const { data, error } = await sb.from(rankViewName()).select('*').limit(1000);
+    // IMPORTANTE: el .order() explicito es obligatorio - el "order by" que tiene la vista
+    // por dentro NO se respeta al consultarla via la API (PostgREST/Supabase no garantiza el
+    // orden interno de una vista si la consulta de fuera no pide uno explicito). Sin esto el
+    // listado sale en un orden practicamente aleatorio (bug real encontrado el 2026-09-02:
+    // un jugador con la media mas alta del mes no aparecia el primero).
+    const { data, error } = await sb.from(rankViewName()).select('*').order(scoreKey, { ascending: false }).limit(1000);
     if (error || !data || data.length === 0) {
       emptyEl.style.display = 'block';
       return;
@@ -952,7 +957,9 @@
     listEl.innerHTML = '';
     youBox.style.display = 'none';
     gapEl.style.display = 'none';
-    const { data, error } = await sb.from('ranking_monthly').select('*').limit(1000);
+    // ver comentario en loadOnlineRanking: el .order() explicito es obligatorio, el orden
+    // interno de la vista no se respeta si no se pide aqui tambien.
+    const { data, error } = await sb.from('ranking_monthly').select('*').order('avg_score', { ascending: false }).limit(1000);
     if (error || !data || data.length === 0) return;
     const isMine = (row) => currentSession && row.player_id === currentSession.user.id;
     const TOP_N = 5;
