@@ -373,6 +373,7 @@
     <button id="leagueBackToMineBtn" class="ghostBtn" style="display:none; margin:0 0 8px; font-size:12px; padding:5px 10px;" data-i18n="leagueBackToMine">Volver a mi división</button>
     <p style="text-align:center; margin:0 0 10px; font-size:12px; color:#f3e2c088;" data-i18n="leagueNote">Ascienden ⬆️ los 3 primeros, descienden ⬇️ los 3 últimos cada semana.</p>
     <div id="leagueList"></div>
+    <p id="leagueNeedMoreMatches" data-i18n="leagueFirstMatchReminder" style="display:none; margin-top:8px; padding:10px 12px; background:rgba(201,138,46,0.15); border:1px solid #c98a2e88; border-radius:10px; font-size:13px; text-align:center; color:#f3e2c0;"></p>
     <p id="leagueEmpty" data-i18n="leagueEmpty" style="display:none;">Todavía no tienes división asignada - juega alguna partida online y vuelve la semana que viene.</p>
     <p id="leagueDivisionEmpty" data-i18n="leagueDivisionEmpty" style="display:none; text-align:center; font-size:13px; color:#f3e2c088;">Todavía no hay nadie con partidas esta semana en esta división.</p>
     <button id="leagueRulesBtn" class="ghostBtn" data-i18n="leagueRulesLink" style="margin-top:6px;">¿Cómo funcionan las ligas?</button>
@@ -1019,6 +1020,12 @@
       youBox.style.display = 'block';
     }
     if (myIndex >= 0) showRankGap(gapEl, data, myIndex, 'week_score', 'name');
+    // recuerda por que marcas 0 esta semana si aun no llegas a 3 partidas - independiente
+    // del aviso que ya se muestra justo tras guardar la partida (este cubre tambien si se
+    // vuelve a mirar el marcador mas tarde en la misma pantalla)
+    if (myIndex >= 0 && data[myIndex].matches_played < 3) {
+      document.getElementById('leagueReminderBanner').style.display = 'block';
+    }
   }
   // "te faltan X pts para superar a Y (puesto N)" - o "¡vas primero!" si ya está en cabeza.
   // Se usa tanto en la clasificación general como en la de resultados de partida.
@@ -1085,6 +1092,8 @@
     listEl.innerHTML = '';
     emptyEl.style.display = 'none';
     divEmptyEl.style.display = 'none';
+    const needMoreEl = document.getElementById('leagueNeedMoreMatches');
+    needMoreEl.style.display = 'none';
     labelEl.textContent = t('leagueDivisionN', { n: division });
     prevBtn.disabled = division <= 1;
     prevBtn.style.opacity = division <= 1 ? '0.4' : '1';
@@ -1098,6 +1107,15 @@
     }
     nextBtn.disabled = false;
     nextBtn.style.opacity = '1';
+    // si estas viendo tu propia division y todavia no llegas a las 3 partidas de esta
+    // semana, recuerda por que marcas 0 - no solo justo despues de jugar (como ya hacia el
+    // aviso de resultados), tambien cada vez que entres a mirar la clasificacion de Ligas
+    if (currentSession && division === myLeagueDivision) {
+      const myRow = data.find(row => row.player_id === currentSession.user.id);
+      if (myRow && myRow.matches_played < 3) {
+        needMoreEl.style.display = 'block';
+      }
+    }
     data.forEach((row, i) => {
       const row_ = document.createElement('div');
       row_.className = 'scoreRow';
