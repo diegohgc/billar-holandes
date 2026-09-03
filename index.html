@@ -1138,12 +1138,12 @@
     document.getElementById('playerProfileName').textContent = `${countryFlag(country)} ${name}`;
     document.getElementById('playerProfileRecord').textContent = '…';
     document.getElementById('playerProfileStadiumLabel').textContent = '';
-    drawStadiumPreview(document.getElementById('playerProfileCanvas'), 0, 1, 0);
+    drawStadiumPreview(document.getElementById('playerProfileCanvas'), 0, 1, 0, 0);
     document.getElementById('playerProfileScreen').style.display = 'flex';
 
     const [{ data: recordRow }, { data: profile }] = await Promise.all([
       sb.from('ranking_record').select('record_score').eq('player_id', playerId).maybeSingle(),
-      sb.from('profiles').select('seats_built, material_tier, league_division').eq('id', playerId).maybeSingle(),
+      sb.from('profiles').select('seats_built, material_tier, renovated_seats, league_division').eq('id', playerId).maybeSingle(),
     ]);
     const recordScore = recordRow ? recordRow.record_score : knownScore;
     document.getElementById('playerProfileRecord').textContent =
@@ -1151,7 +1151,7 @@
 
     if (profile) {
       const occupancy = await computeLeagueOccupancy(profile.league_division, playerId);
-      drawStadiumPreview(document.getElementById('playerProfileCanvas'), profile.seats_built || 0, profile.material_tier || 1, occupancy);
+      drawStadiumPreview(document.getElementById('playerProfileCanvas'), profile.seats_built || 0, profile.material_tier || 1, profile.renovated_seats || 0, occupancy);
       const matKeys = ['stadiumPhase1', 'stadiumPhase2', 'stadiumPhase3', 'stadiumPhase4'];
       const matKey = matKeys[Math.max(0, Math.min(3, (profile.material_tier || 1) - 1))];
       document.getElementById('playerProfileStadiumLabel').textContent =
@@ -1197,7 +1197,7 @@
     document.getElementById('stadiumCoins').textContent = '🪙 ' + profile.coins;
     renderStadiumPhases(profile);
     const occupancy = await computeLeagueOccupancy(profile.league_division, currentSession.user.id);
-    drawStadiumPreview(document.getElementById('stadiumPreviewCanvas'), profile.seats_built, profile.material_tier, occupancy);
+    drawStadiumPreview(document.getElementById('stadiumPreviewCanvas'), profile.seats_built, profile.material_tier, profile.renovated_seats, occupancy);
   }
 
   function renderStadiumPhases(profile) {
@@ -3075,6 +3075,29 @@
     }
   }
 
+  // capa de "progreso de reforma": 8 bloques mas (mismo patron que standRowMeshes), pintados
+  // con el color del SIGUIENTE material, que crecen en longitud segun cuantos asientos
+  // llevas reformados dentro de la fase actual (renovated_seats / 200) - asi cada compra de
+  // un pack de reforma se nota al momento, en vez de no ver nada hasta completar los 200
+  // (bug real reportado por el usuario el 2026-09-02: "hice una reforma a hormigon y no vi
+  // nada visible"). Se apoya en el extremo mas cercano al tablero (z=0) de lo ya construido.
+  const renovationOverlayMeshes = [];
+  for (let side = 0; side < 2; side++) {
+    const sign = side === 0 ? -1 : 1;
+    for (let row = 0; row < STAND_ROWS; row++) {
+      const rowHeight = STAND_ROW_HEIGHTS[row];
+      const geo = new THREE.BoxGeometry(STAND_ROW_DEPTH, rowHeight, 1);
+      const mat = new THREE.MeshStandardMaterial({ color: STADIUM_MATERIAL_COLORS[1], roughness: 0.85 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = mesh.receiveShadow = true;
+      mesh.visible = false;
+      mesh.userData.xCenter = sign * (bottomHalf + STAND_MARGIN + (row + 0.5) * STAND_ROW_DEPTH);
+      mesh.userData.rowHeight = rowHeight;
+      standGroup.add(mesh);
+      renovationOverlayMeshes.push(mesh);
+    }
+  }
+
   // publico con forma de cuerpo (cilindro) + cabeza (esfera) en vez de una simple caja -
   // dos InstancedMesh que comparten indice de instancia (misma persona = mismo indice en
   // ambos), barato de renderizar hasta 200 personas
@@ -3275,8 +3298,9 @@
     if (finished) crowdCelebrationT = null;
   }
 
-  function updateStadiumVisual(seatsBuilt, materialTier, occupancyFraction, playerName, countryCode) {
-    const color = STADIUM_MATERIAL_COLORS[Math.max(0, Math.min(3, (materialTier || 1) - 1))];
+  function updateStadiumVisual(seatsBuilt, materialTier, renovatedSeats, occupancyFraction, playerName, countryCode) {
+    const tierIdx = Math.max(0, Math.min(3, (materialTier || 1) - 1));
+    const color = STADIUM_MATERIAL_COLORS[tierIdx];
     const seatsPerSideInt = Math.floor((seatsBuilt || 0) / 2);
     const lenFraction = Math.min(1, seatsPerSideInt / STAND_MAX_SEATS_PER_SIDE);
     const standLength = BOARD.length * lenFraction;
@@ -3287,6 +3311,24 @@
       mesh.visible = standLength > 0.5;
       mesh.scale.z = Math.max(0.001, standLength);
       mesh.position.set(mesh.userData.xCenter, mesh.userData.rowHeight / 2, zPos);
+    });
+
+    // progreso de reforma: si hay una fase siguiente (tierIdx < 3) y ya llevas algo
+    // reformado, se pinta esa porcion (proporcional a renovated_seats/200) con el color del
+    // SIGUIENTE material, apoyada en el extremo de la grada mas cercano al tablero (z=0) -
+    // asi cada pack comprado se ve reflejado al instante, no solo al completar los 200
+    const hasNextTier = tierIdx < 3;
+    const renovFraction = hasNextTier ? Math.max(0, Math.min(1, (renovatedSeats || 0) / (STAND_MAX_SEATS_PER_SIDE * 2))) : 0;
+    const overlayLength = standLength * renovFraction;
+    const overlayZPos = -overlayLength / 2; // apoyada en z=0, el mismo extremo que la grada ya construida
+    renovationOverlayMeshes.forEach(mesh => {
+      mesh.material.color.setHex(hasNextTier ? STADIUM_MATERIAL_COLORS[tierIdx + 1] : color);
+      mesh.visible = overlayLength > 0.5;
+      // x/y un pelin mayores que la grada base (1.02) para que la superficie quede
+      // ligeramente por delante y no compita en el mismo plano exacto - sin esto, dos caras
+      // coincidiendo exactamente en el mismo sitio parpadean (z-fighting)
+      mesh.scale.set(1.02, 1.02, Math.max(0.001, overlayLength));
+      mesh.position.set(mesh.userData.xCenter, mesh.userData.rowHeight / 2, overlayZPos);
     });
 
     // gente en cuadricula DENSA (separacion fija, no ligada a cuantos asientos tengas
@@ -3459,12 +3501,12 @@
   // clasificacion de liga de esta semana) y actualiza la mesa 3D - se llama al iniciar
   // sesion, tras comprar packs/reformas, y al terminar una partida online
   async function loadStadiumVisualData() {
-    if (!currentSession) { updateStadiumVisual(0, 1, 0); hudCoins = hudDivision = hudAttendance = null; hudCrowdFraction = 0; return; }
-    const { data: profile } = await sb.from('profiles').select('seats_built, material_tier, league_division, name, country, coins')
+    if (!currentSession) { updateStadiumVisual(0, 1, 0, 0); hudCoins = hudDivision = hudAttendance = null; hudCrowdFraction = 0; return; }
+    const { data: profile } = await sb.from('profiles').select('seats_built, material_tier, renovated_seats, league_division, name, country, coins')
       .eq('id', currentSession.user.id).maybeSingle();
-    if (!profile) { updateStadiumVisual(0, 1, 0); hudCoins = hudDivision = hudAttendance = null; hudCrowdFraction = 0; return; }
+    if (!profile) { updateStadiumVisual(0, 1, 0, 0); hudCoins = hudDivision = hudAttendance = null; hudCrowdFraction = 0; return; }
     const occupancy = await computeLeagueOccupancy(profile.league_division, currentSession.user.id);
-    updateStadiumVisual(profile.seats_built || 0, profile.material_tier || 1, occupancy, profile.name, profile.country);
+    updateStadiumVisual(profile.seats_built || 0, profile.material_tier || 1, profile.renovated_seats || 0, occupancy, profile.name, profile.country);
     // guardados aparte para el HUD de la partida (ver refreshHud) - se pintan solo en
     // partidas online, junto al resto del marcador
     hudCoins = profile.coins;
@@ -3485,14 +3527,21 @@
   // fiel a como se ve de verdad en la mesa 3D: misma proporcion de longitud construida,
   // mismo color de material, y las mismas 4 filas escalonadas (STAND_ROWS) en vez de un
   // bloque plano - cada fila un poco mas clara que la anterior, como los escalones reales
-  function drawStadiumPreview(canvas, seatsBuilt, materialTier, occupancy) {
+  function drawStadiumPreview(canvas, seatsBuilt, materialTier, renovatedSeats, occupancy) {
     const ctx = canvas.getContext('2d');
     const w = canvas.width, h = canvas.height;
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = '#150c04';
     ctx.fillRect(0, 0, w, h);
     const matColors = ['#a9764a', '#8a8a85', '#3f6b8f', '#c98a2e'];
-    const baseColor = matColors[Math.max(0, Math.min(3, (materialTier || 1) - 1))];
+    const tierIdx = Math.max(0, Math.min(3, (materialTier || 1) - 1));
+    const baseColor = matColors[tierIdx];
+    // progreso de reforma: misma idea que en 3D (updateStadiumVisual) - una porcion pintada
+    // ya con el color del siguiente material, proporcional a lo reformado de verdad, para
+    // que cada compra se note al instante en vez de solo al completar los 200 asientos
+    const hasNextTier = tierIdx < 3;
+    const renovFraction = hasNextTier ? Math.max(0, Math.min(1, (renovatedSeats || 0) / 200)) : 0;
+    const nextColor = hasNextTier ? matColors[tierIdx + 1] : baseColor;
     const marginY = 8;
     const usableH = h - marginY * 2;
     const seatsPerSide = (seatsBuilt || 0) / 2;
@@ -3515,6 +3564,10 @@
         ctx.fillStyle = shadeHexColor(baseColor, shade);
         const rx = inward === 1 ? x + row * rowW : x + standW - (row + 1) * rowW;
         ctx.fillRect(rx, marginY, rowW - 1, standH);
+        if (renovFraction > 0) {
+          ctx.fillStyle = shadeHexColor(nextColor, shade);
+          ctx.fillRect(rx, marginY, rowW - 1, standH * renovFraction);
+        }
       }
       // puntitos de "gente" repartidos en las 4 filas, densidad segun el aforo (igual
       // criterio que en 3D: cada fila puede llenarse independientemente)
