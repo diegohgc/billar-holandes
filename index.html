@@ -1196,9 +1196,10 @@
   // para precios y reglas). Los 200 asientos se construyen primero en madera, y solo al
   // completarse los 200 se desbloquea reformarlos TODOS, poco a poco, al siguiente
   // material - nunca hay secciones mezcladas de distinto material a la vez. ----
-  // 350 desde la fase 2 (2026-09-05): 200 en las 2 laterales + 150 en la grada del fondo,
-  // ver LATERAL_SEATS_CAP/FONDO_MAX_SEATS junto a fondoRowMeshes.
-  const STADIUM_TOTAL_SEATS = 350;
+  // 500 desde la fase 3 (2026-09-06): 350 del nivel 1 (200 laterales + 150 fondo) + 150 del
+  // nivel 2 (100 laterales + 50 fondo) - ver LEVEL1_SEATS_CAP/UPPER_LATERAL_SEATS_CAP/
+  // UPPER_FONDO_MAX_SEATS junto a fondoRowMeshes/upperStandRowMeshes.
+  const STADIUM_TOTAL_SEATS = 500;
   const STADIUM_MATERIALS = [
     { tier: 1, matKey: 'stadiumPhase1', swatch: '#a9764a' },
     { tier: 2, matKey: 'stadiumPhase2', swatch: '#8a8a85' },
@@ -3143,8 +3144,19 @@
   // LATERAL_SEATS_CAP asientos siempre van a las 2 laterales (igual que antes), los
   // siguientes hasta FONDO_MAX_SEATS llenan esta - ver updateStadiumVisual/drawStadiumPreview.
   const LATERAL_SEATS_CAP = STAND_MAX_SEATS_PER_SIDE * 2; // 200
-  const FONDO_MAX_SEATS = 150; // aforo total del estadio: 200 + 150 = 350 (STADIUM_TOTAL_SEATS)
+  const FONDO_MAX_SEATS = 150; // 200 + 150 = 350, aforo del nivel 1 (LEVEL1_SEATS_CAP)
   const FONDO_MARGIN = 6; // separacion respecto a la carcasa de la porteria
+  const LEVEL1_SEATS_CAP = LATERAL_SEATS_CAP + FONDO_MAX_SEATS; // 350
+
+  // fase 3 (2026-09-06): segundo nivel de gradas (laterales + fondo), para llegar de 350 a
+  // 500 de aforo total - un "anfiteatro" que continua la MISMA secuencia de escalones que el
+  // nivel 1 (filas 4-7 en vez de 0-3), pero con un salto de altura (WALKWAY_GAP) que separa
+  // visualmente los dos niveles, como el pasillo/vomitorio de un estadio real. Solo empieza a
+  // construirse una vez el nivel 1 esta completo (350) - ver updateStadiumVisual.
+  const UPPER_LATERAL_SEATS_CAP = 100; // 50 asientos por lado en el nivel superior de las laterales
+  const UPPER_FONDO_MAX_SEATS = 50; // nivel superior de la grada del fondo: 350+100+50 = 500
+  const WALKWAY_GAP = 3; // salto de altura entre el ultimo escalon del nivel 1 y el primero del nivel 2
+  const UPPER_ROW_HEIGHTS = STAND_ROW_HEIGHTS.map(h => h + STAND_ROW_HEIGHTS[STAND_ROWS - 1] + WALKWAY_GAP);
 
   const standGroup = new THREE.Group();
   scene.add(standGroup);
@@ -3251,14 +3263,102 @@
     }
   }
 
+  // ---- nivel 2 (fase 3, 2026-09-06): mismo patron que el nivel 1, pero continuando la
+  // secuencia de escalones en las filas 4-7 (mas alejadas/altas) en vez de 0-3, y con
+  // UPPER_ROW_HEIGHTS (que incluye el salto de WALKWAY_GAP) en vez de STAND_ROW_HEIGHTS ----
+  const UPPER_ROW_OFFSET = STAND_ROWS; // continua la secuencia de profundidad, no la reinicia
+
+  // laterales nivel 2
+  const upperStandRowMeshes = [];
+  for (let side = 0; side < 2; side++) {
+    const sign = side === 0 ? -1 : 1;
+    for (let row = 0; row < STAND_ROWS; row++) {
+      const rowHeight = UPPER_ROW_HEIGHTS[row];
+      const geo = new THREE.BoxGeometry(STAND_ROW_DEPTH, rowHeight, 1);
+      const mat = new THREE.MeshStandardMaterial({ color: STADIUM_MATERIAL_COLORS[0], roughness: 0.85 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = mesh.receiveShadow = true;
+      mesh.visible = false;
+      mesh.userData.xCenter = sign * (bottomHalf + STAND_MARGIN + (UPPER_ROW_OFFSET + row + 0.5) * STAND_ROW_DEPTH);
+      mesh.userData.rowHeight = rowHeight;
+      standGroup.add(mesh);
+      upperStandRowMeshes.push(mesh);
+    }
+  }
+  // capa de progreso de reforma del nivel 2 de las laterales (mismo patron que renovationOverlayMeshes)
+  const upperRenovationOverlayMeshes = [];
+  for (let side = 0; side < 2; side++) {
+    const sign = side === 0 ? -1 : 1;
+    for (let row = 0; row < STAND_ROWS; row++) {
+      const rowHeight = UPPER_ROW_HEIGHTS[row];
+      const geo = new THREE.BoxGeometry(STAND_ROW_DEPTH, rowHeight, 1);
+      const mat = new THREE.MeshStandardMaterial({ color: STADIUM_MATERIAL_COLORS[1], roughness: 0.85 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = mesh.receiveShadow = true;
+      mesh.visible = false;
+      mesh.userData.xCenter = sign * (bottomHalf + STAND_MARGIN + (UPPER_ROW_OFFSET + row + 0.5) * STAND_ROW_DEPTH);
+      mesh.userData.rowHeight = rowHeight;
+      standGroup.add(mesh);
+      upperRenovationOverlayMeshes.push(mesh);
+    }
+  }
+
+  // fondo nivel 2 - continua la secuencia de profundidad en Z, mas alla del nivel 1 del fondo
+  const upperFondoRowMeshes = [];
+  for (let row = 0; row < STAND_ROWS; row++) {
+    const rowHeight = UPPER_ROW_HEIGHTS[row];
+    const geo = new THREE.BoxGeometry(1, rowHeight, STAND_ROW_DEPTH);
+    const mat = new THREE.MeshStandardMaterial({ color: STADIUM_MATERIAL_COLORS[0], roughness: 0.85 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = mesh.receiveShadow = true;
+    mesh.visible = false;
+    mesh.userData.zCenter = -(BOARD.length + BOARD.gateDepth + FONDO_MARGIN + (UPPER_ROW_OFFSET + row + 0.5) * STAND_ROW_DEPTH);
+    mesh.userData.rowHeight = rowHeight;
+    standGroup.add(mesh);
+    upperFondoRowMeshes.push(mesh);
+  }
+  const upperFondoRenovationOverlayMeshes = [];
+  for (let row = 0; row < STAND_ROWS; row++) {
+    const rowHeight = UPPER_ROW_HEIGHTS[row];
+    const geo = new THREE.BoxGeometry(1, rowHeight, STAND_ROW_DEPTH);
+    const mat = new THREE.MeshStandardMaterial({ color: STADIUM_MATERIAL_COLORS[1], roughness: 0.85 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = mesh.receiveShadow = true;
+    mesh.visible = false;
+    mesh.userData.zCenter = -(BOARD.length + BOARD.gateDepth + FONDO_MARGIN + (UPPER_ROW_OFFSET + row + 0.5) * STAND_ROW_DEPTH);
+    mesh.userData.rowHeight = rowHeight;
+    standGroup.add(mesh);
+    upperFondoRenovationOverlayMeshes.push(mesh);
+  }
+
+  // esquinas del nivel 2 - mismo patron diagonal que cornerMeshes, conectando el nivel 2 de
+  // las laterales con el nivel 2 del fondo
+  const upperCornerMeshes = [];
+  for (let side = 0; side < 2; side++) {
+    const sign = side === 0 ? -1 : 1;
+    for (let row = 0; row < STAND_ROWS; row++) {
+      const rowHeight = UPPER_ROW_HEIGHTS[row];
+      const geo = new THREE.BoxGeometry(1, rowHeight, STAND_ROW_DEPTH);
+      const mat = new THREE.MeshStandardMaterial({ color: STADIUM_MATERIAL_COLORS[0], roughness: 0.85 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = mesh.receiveShadow = true;
+      mesh.visible = false;
+      mesh.userData.side = sign;
+      mesh.userData.row = row;
+      mesh.userData.rowHeight = rowHeight;
+      standGroup.add(mesh);
+      upperCornerMeshes.push(mesh);
+    }
+  }
+
   // publico con forma de cuerpo (cilindro) + cabeza (esfera) en vez de una simple caja -
   // dos InstancedMesh que comparten indice de instancia (misma persona = mismo indice en
   // ambos), barato de renderizar hasta 200 personas
-  // capacidad de render (no confundir con "asientos" economicos, ver mas abajo): con las
-  // laterales completas (200) y la grada del fondo completa (150) a densidad realista caben
-  // unas 1300 personas - se renderizan como maximo esas, muy barato via InstancedMesh (1 sola
-  // llamada de dibujo). Subido de 800 a 1300 el 2026-09-05 al añadir la grada del fondo.
-  const STADIUM_MAX_PEOPLE = 1300;
+  // capacidad de render (no confundir con "asientos" economicos, ver mas abajo): con los 2
+  // niveles completos (laterales + fondo, 500 de aforo) a densidad realista caben unas 1800
+  // personas - se renderizan como maximo esas, muy barato via InstancedMesh (1 sola llamada
+  // de dibujo). Subido de 1300 a 1800 el 2026-09-06 al añadir el nivel 2.
+  const STADIUM_MAX_PEOPLE = 1800;
   const PERSON_SPACING_Z = 2.8; // separacion entre columnas de gente, fija, NO depende de cuantos asientos tengas comprados
   const CLOTHES_COLORS = [0xd8442e, 0xe8b23a, 0x3b7dc9, 0x4f9e5c, 0xf3e2c0, 0x8a5c34, 0xffffff, 0x7a3ba0];
   const SKIN_COLORS = [0xf0c8a0, 0xd8a878, 0xb87d4e, 0x8a5a34, 0x5c3a20];
@@ -3467,6 +3567,18 @@
     const fondoFraction = Math.min(1, fondoSeats / FONDO_MAX_SEATS);
     const fondoWidth = BOARD.widthTop * fondoFraction; // crece desde el centro hacia los lados
 
+    // fase 3 (2026-09-06): una vez el nivel 1 esta completo (350), el resto llena primero el
+    // nivel 2 de las laterales (100 mas) y despues el nivel 2 del fondo (50 mas) - mismo
+    // patron secuencial que el nivel 1.
+    const upperLateralSeats = Math.min(Math.max(0, (seatsBuilt || 0) - LEVEL1_SEATS_CAP), UPPER_LATERAL_SEATS_CAP);
+    const upperFondoSeats = Math.max(0, (seatsBuilt || 0) - LEVEL1_SEATS_CAP - UPPER_LATERAL_SEATS_CAP);
+    const upperSeatsPerSideInt = Math.floor(upperLateralSeats / 2);
+    const upperLenFraction = Math.min(1, upperSeatsPerSideInt / (UPPER_LATERAL_SEATS_CAP / 2));
+    const upperStandLength = BOARD.length * upperLenFraction;
+    const upperZPos = -upperStandLength / 2;
+    const upperFondoFraction = Math.min(1, upperFondoSeats / UPPER_FONDO_MAX_SEATS);
+    const upperFondoWidth = BOARD.widthTop * upperFondoFraction;
+
     standRowMeshes.forEach(mesh => {
       mesh.material.color.setHex(color);
       mesh.visible = standLength > 0.5;
@@ -3477,6 +3589,18 @@
       mesh.material.color.setHex(color);
       mesh.visible = fondoWidth > 0.5;
       mesh.scale.x = Math.max(0.001, fondoWidth);
+      mesh.position.set(0, mesh.userData.rowHeight / 2, mesh.userData.zCenter);
+    });
+    upperStandRowMeshes.forEach(mesh => {
+      mesh.material.color.setHex(color);
+      mesh.visible = upperStandLength > 0.5;
+      mesh.scale.z = Math.max(0.001, upperStandLength);
+      mesh.position.set(mesh.userData.xCenter, mesh.userData.rowHeight / 2, upperZPos);
+    });
+    upperFondoRowMeshes.forEach(mesh => {
+      mesh.material.color.setHex(color);
+      mesh.visible = upperFondoWidth > 0.5;
+      mesh.scale.x = Math.max(0.001, upperFondoWidth);
       mesh.position.set(0, mesh.userData.rowHeight / 2, mesh.userData.zCenter);
     });
 
@@ -3506,6 +3630,21 @@
       mesh.scale.set(1.02, 1.02, Math.max(0.001, overlayLength));
       mesh.position.set(mesh.userData.xCenter, mesh.userData.rowHeight / 2, overlayZPos);
     });
+    const upperOverlayLength = upperStandLength * renovFraction;
+    const upperOverlayZPos = -upperOverlayLength / 2;
+    const upperFondoOverlayWidth = upperFondoWidth * renovFraction;
+    upperFondoRenovationOverlayMeshes.forEach(mesh => {
+      mesh.material.color.setHex(hasNextTier ? STADIUM_MATERIAL_COLORS[tierIdx + 1] : color);
+      mesh.visible = upperFondoOverlayWidth > 0.5;
+      mesh.scale.set(Math.max(0.001, upperFondoOverlayWidth), 1.02, 1.02);
+      mesh.position.set(0, mesh.userData.rowHeight / 2, mesh.userData.zCenter);
+    });
+    upperRenovationOverlayMeshes.forEach(mesh => {
+      mesh.material.color.setHex(hasNextTier ? STADIUM_MATERIAL_COLORS[tierIdx + 1] : color);
+      mesh.visible = upperOverlayLength > 0.5;
+      mesh.scale.set(1.02, 1.02, Math.max(0.001, upperOverlayLength));
+      mesh.position.set(mesh.userData.xCenter, mesh.userData.rowHeight / 2, upperOverlayZPos);
+    });
 
     // esquinas: tabla diagonal por fila que conecta el extremo de la lateral (ya al maximo,
     // z=-standLength) con el borde de la grada del fondo en ese mismo lado (fondoWidth/2) -
@@ -3521,6 +3660,24 @@
       const dx = fondoX - latX, dz = fondoZ - latZ;
       const dist = Math.hypot(dx, dz);
       const visible = standLength > 0.5 && fondoWidth > 0.5 && dist > 0.5;
+      mesh.visible = visible;
+      if (visible) {
+        mesh.material.color.setHex(color);
+        mesh.scale.set(dist, 1, 1);
+        mesh.position.set((latX + fondoX) / 2, mesh.userData.rowHeight / 2, (latZ + fondoZ) / 2);
+        mesh.rotation.y = Math.atan2(-dz, dx);
+      }
+    });
+    upperCornerMeshes.forEach(mesh => {
+      const sign = mesh.userData.side;
+      const row = mesh.userData.row;
+      const latX = sign * (bottomHalf + STAND_MARGIN + (UPPER_ROW_OFFSET + row + 0.5) * STAND_ROW_DEPTH);
+      const latZ = -upperStandLength;
+      const fondoX = sign * (upperFondoWidth / 2);
+      const fondoZ = upperFondoRowMeshes[row].userData.zCenter;
+      const dx = fondoX - latX, dz = fondoZ - latZ;
+      const dist = Math.hypot(dx, dz);
+      const visible = upperStandLength > 0.5 && upperFondoWidth > 0.5 && dist > 0.5;
       mesh.visible = visible;
       if (visible) {
         mesh.material.color.setHex(color);
@@ -3673,6 +3830,58 @@
         const zCenter = fondoRowMeshes[slot.row].userData.zCenter;
         const z = zCenter + (Math.random() - 0.5) * (STAND_ROW_DEPTH - 1.2);
         const x = -fondoWidth / 2 + (slot.col + 0.5) * colSpacingF;
+        placePerson(x, z, rowHeight, 0.9);
+      }
+    }
+
+    // nivel 2 (fase 3, 2026-09-06): mismo patron que el nivel 1, con UPPER_ROW_HEIGHTS y las
+    // filas de upperStandRowMeshes/upperFondoRowMeshes en vez de las del nivel 1
+    [-1, 1].forEach(sign => {
+      if (upperStandLength <= 0) return;
+      const cols = Math.max(1, Math.floor(upperStandLength / PERSON_SPACING_Z));
+      const colSpacing = upperStandLength / cols;
+      const capacity = cols * STAND_ROWS;
+      const slots = [];
+      for (let col = 0; col < cols; col++) {
+        for (let row = 0; row < STAND_ROWS; row++) {
+          slots.push({ col, row });
+        }
+      }
+      for (let i = slots.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [slots[i], slots[j]] = [slots[j], slots[i]];
+      }
+      const attendanceSide = Math.max(0, Math.min(capacity, Math.round((occupancyFraction || 0) * capacity)));
+      for (let i = 0; i < attendanceSide && instanceIdx < STADIUM_MAX_PEOPLE; i++) {
+        const slot = slots[i];
+        const rowHeight = UPPER_ROW_HEIGHTS[slot.row];
+        const xCenter = sign * (bottomHalf + STAND_MARGIN + (UPPER_ROW_OFFSET + slot.row + 0.5) * STAND_ROW_DEPTH);
+        const x = xCenter + (Math.random() - 0.5) * (STAND_ROW_DEPTH - 1.2);
+        const z = -(slot.col + 0.5) * colSpacing;
+        placePerson(x, z, rowHeight, sign * 0.9);
+      }
+    });
+    if (upperFondoWidth > 0) {
+      const colsF = Math.max(1, Math.floor(upperFondoWidth / PERSON_SPACING_Z));
+      const colSpacingF = upperFondoWidth / colsF;
+      const capacityF = colsF * STAND_ROWS;
+      const slotsF = [];
+      for (let col = 0; col < colsF; col++) {
+        for (let row = 0; row < STAND_ROWS; row++) {
+          slotsF.push({ col, row });
+        }
+      }
+      for (let i = slotsF.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [slotsF[i], slotsF[j]] = [slotsF[j], slotsF[i]];
+      }
+      const attendanceFondo = Math.max(0, Math.min(capacityF, Math.round((occupancyFraction || 0) * capacityF)));
+      for (let i = 0; i < attendanceFondo && instanceIdx < STADIUM_MAX_PEOPLE; i++) {
+        const slot = slotsF[i];
+        const rowHeight = UPPER_ROW_HEIGHTS[slot.row];
+        const zCenter = upperFondoRowMeshes[slot.row].userData.zCenter;
+        const z = zCenter + (Math.random() - 0.5) * (STAND_ROW_DEPTH - 1.2);
+        const x = -upperFondoWidth / 2 + (slot.col + 0.5) * colSpacingF;
         placePerson(x, z, rowHeight, 0.9);
       }
     }
