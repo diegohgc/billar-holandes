@@ -281,9 +281,9 @@
 
 <!-- aviso "estilo retransmision de TV" de asistencia al empezar una partida online, ver
      showAttendanceBanner() - se muestra un momento durante el barrido de camara inicial -->
-<div id="attendanceBanner" style="display:none; position:fixed; left:50%; top:calc(14px + env(safe-area-inset-top)); transform:translateX(-50%); z-index:55; background:linear-gradient(90deg, rgba(20,12,4,.95), rgba(36,24,9,.95)); border:1px solid #ffcf7a55; border-radius:10px; padding:8px 18px; text-align:center; pointer-events:none; box-shadow:0 6px 20px rgba(0,0,0,.5);">
+<div id="attendanceBanner" style="display:none; position:fixed; left:50%; bottom:calc(130px + env(safe-area-inset-bottom)); transform:translateX(-50%); z-index:55; background:linear-gradient(90deg, rgba(20,12,4,.95), rgba(36,24,9,.95)); border:1px solid #ffcf7a55; border-radius:10px; padding:8px 16px; text-align:center; pointer-events:none; box-shadow:0 6px 20px rgba(0,0,0,.5); max-width:92vw;">
   <div style="font-size:10px; letter-spacing:1.5px; color:#ff6a5a; font-weight:700;">🔴 <span data-i18n="liveLabel">EN DIRECTO</span></div>
-  <div style="font-size:14px; font-weight:700; color:#ffcf7a; white-space:nowrap;" id="attendanceBannerText"></div>
+  <div style="font-size:13px; font-weight:700; color:#ffcf7a;" id="attendanceBannerText"></div>
 </div>
 
 <div id="contactScreen" class="overlay" style="display:none">
@@ -2747,14 +2747,14 @@
     el.style.transition = 'opacity .4s, transform .4s';
     el.style.opacity = '0';
     el.style.display = 'block';
-    el.style.transform = 'translateX(-50%) translateY(-10px)';
+    el.style.transform = 'translateX(-50%) translateY(10px)';
     requestAnimationFrame(() => {
       el.style.opacity = '1';
       el.style.transform = 'translateX(-50%) translateY(0)';
     });
     setTimeout(() => {
       el.style.opacity = '0';
-      el.style.transform = 'translateX(-50%) translateY(-10px)';
+      el.style.transform = 'translateX(-50%) translateY(10px)';
       setTimeout(() => { el.style.display = 'none'; }, 420);
     }, 3400);
   }
@@ -3968,28 +3968,30 @@
 
     // grada del fondo (fase 2, 2026-09-05): mismo patron que las laterales, pero las
     // columnas se reparten a lo ancho (X, desde el centro hacia los lados) y las filas se
-    // apoyan en la Z fija de cada fondoRowMeshes (detras de la porteria)
-    if (fondoWidth > 0) {
-      const colsF = Math.max(1, Math.floor(fondoWidth / PERSON_SPACING_Z));
-      const colSpacingF = fondoWidth / colsF;
-      const capacityF = colsF * STAND_ROWS;
-      const slotsF = [];
-      for (let col = 0; col < colsF; col++) {
-        for (let row = 0; row < STAND_ROWS; row++) {
-          slotsF.push({ col, row });
-        }
-      }
-      for (let i = slotsF.length - 1; i > 0; i--) {
+    // apoyan en la Z fija de cada fondoRowMeshes (detras de la porteria).
+    // IMPORTANTE (arreglo 2026-09-06): cada fila tiene AHORA su propio ancho (construccion
+    // secuencial fila por fila, ver fondoRowFraction) - hay que calcular columnas y colocar
+    // a la gente FILA A FILA con el ancho real de esa fila, no con un fondoWidth compartido
+    // para las 4 - si no, la gente de las filas altas (aun sin construir) aparecia flotando
+    // por encima de la porteria, sobre una fila que ni siquiera existe todavia (bug real
+    // reportado por el usuario el 2026-09-06).
+    for (let row = 0; row < STAND_ROWS; row++) {
+      const rowWidth = BOARD.widthTop * fondoRowFraction(fondoSeats, FONDO_MAX_SEATS, row, STAND_ROWS);
+      if (rowWidth <= 0.5) continue;
+      const rowHeight = STAND_ROW_HEIGHTS[row];
+      const zCenter = fondoRowMeshes[row].userData.zCenter;
+      const cols = Math.max(1, Math.floor(rowWidth / PERSON_SPACING_Z));
+      const colSpacing = rowWidth / cols;
+      const colOrder = Array.from({ length: cols }, (_, i) => i);
+      for (let i = colOrder.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [slotsF[i], slotsF[j]] = [slotsF[j], slotsF[i]];
+        [colOrder[i], colOrder[j]] = [colOrder[j], colOrder[i]];
       }
-      const attendanceFondo = Math.max(0, Math.min(capacityF, Math.round((occupancyFraction || 0) * capacityF)));
-      for (let i = 0; i < attendanceFondo && instanceIdx < STADIUM_MAX_PEOPLE; i++) {
-        const slot = slotsF[i];
-        const rowHeight = STAND_ROW_HEIGHTS[slot.row];
-        const zCenter = fondoRowMeshes[slot.row].userData.zCenter;
+      const attendanceRow = Math.max(0, Math.min(cols, Math.round((occupancyFraction || 0) * cols)));
+      for (let i = 0; i < attendanceRow && instanceIdx < STADIUM_MAX_PEOPLE; i++) {
+        const col = colOrder[i];
         const z = zCenter + (Math.random() - 0.5) * (STAND_ROW_DEPTH - 1.2);
-        const x = -fondoWidth / 2 + (slot.col + 0.5) * colSpacingF;
+        const x = -rowWidth / 2 + (col + 0.5) * colSpacing;
         placePerson(x, z, rowHeight, 0.9);
       }
     }
@@ -4021,27 +4023,24 @@
         placePerson(x, z, rowHeight, sign * 0.9);
       }
     });
-    if (upperFondoWidth > 0) {
-      const colsF = Math.max(1, Math.floor(upperFondoWidth / PERSON_SPACING_Z));
-      const colSpacingF = upperFondoWidth / colsF;
-      const capacityF = colsF * STAND_ROWS;
-      const slotsF = [];
-      for (let col = 0; col < colsF; col++) {
-        for (let row = 0; row < STAND_ROWS; row++) {
-          slotsF.push({ col, row });
-        }
-      }
-      for (let i = slotsF.length - 1; i > 0; i--) {
+    // mismo arreglo que en la grada del fondo del nivel 1: cada fila tiene su propio ancho
+    for (let row = 0; row < STAND_ROWS; row++) {
+      const rowWidth = BOARD.widthTop * fondoRowFraction(upperFondoSeats, UPPER_FONDO_MAX_SEATS, row, STAND_ROWS);
+      if (rowWidth <= 0.5) continue;
+      const rowHeight = UPPER_ROW_HEIGHTS[row];
+      const zCenter = upperFondoRowMeshes[row].userData.zCenter;
+      const cols = Math.max(1, Math.floor(rowWidth / PERSON_SPACING_Z));
+      const colSpacing = rowWidth / cols;
+      const colOrder = Array.from({ length: cols }, (_, i) => i);
+      for (let i = colOrder.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [slotsF[i], slotsF[j]] = [slotsF[j], slotsF[i]];
+        [colOrder[i], colOrder[j]] = [colOrder[j], colOrder[i]];
       }
-      const attendanceFondo = Math.max(0, Math.min(capacityF, Math.round((occupancyFraction || 0) * capacityF)));
-      for (let i = 0; i < attendanceFondo && instanceIdx < STADIUM_MAX_PEOPLE; i++) {
-        const slot = slotsF[i];
-        const rowHeight = UPPER_ROW_HEIGHTS[slot.row];
-        const zCenter = upperFondoRowMeshes[slot.row].userData.zCenter;
+      const attendanceRow = Math.max(0, Math.min(cols, Math.round((occupancyFraction || 0) * cols)));
+      for (let i = 0; i < attendanceRow && instanceIdx < STADIUM_MAX_PEOPLE; i++) {
+        const col = colOrder[i];
         const z = zCenter + (Math.random() - 0.5) * (STAND_ROW_DEPTH - 1.2);
-        const x = -upperFondoWidth / 2 + (slot.col + 0.5) * colSpacingF;
+        const x = -rowWidth / 2 + (col + 0.5) * colSpacing;
         placePerson(x, z, rowHeight, 0.9);
       }
     }
