@@ -3435,6 +3435,47 @@
   });
   buildCafeteria(0, -(BOARD.length + BOARD.gateDepth + FONDO_MARGIN * 2 + STAND_ROWS * STAND_ROW_DEPTH * 2 + 10), Math.PI);
 
+  // ---- gruas de construccion (fase 5, 2026-09-06): decorativas, visibles SOLO mientras el
+  // estadio no este terminado del todo (aforo al maximo Y material premium) - en cuanto se
+  // completa todo, desaparecen (la obra ha terminado). Un giro lento constante les da vida
+  // sin animar nada mas caro que una rotacion por frame (ver updateCraneSpin). ----
+  const CRANE_HEIGHT = 55, CRANE_JIB_LENGTH = 22, CRANE_COUNTER_JIB_LENGTH = 8;
+  const craneGroups = [];
+  [-1, 1].forEach(sign => {
+    const g = new THREE.Group();
+    const mastMat = new THREE.MeshStandardMaterial({ color: 0xe8b23a, roughness: 0.6, metalness: 0.3 });
+    const mast = new THREE.Mesh(new THREE.BoxGeometry(1.6, CRANE_HEIGHT, 1.6), mastMat);
+    mast.position.y = CRANE_HEIGHT / 2;
+    mast.castShadow = true;
+    g.add(mast);
+    const jibMat = new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 0.6, metalness: 0.3 });
+    const jib = new THREE.Mesh(new THREE.BoxGeometry(CRANE_JIB_LENGTH, 1, 1), jibMat);
+    jib.position.set(CRANE_JIB_LENGTH / 2, CRANE_HEIGHT, 0);
+    g.add(jib);
+    const counterJib = new THREE.Mesh(new THREE.BoxGeometry(CRANE_COUNTER_JIB_LENGTH, 1, 1), jibMat);
+    counterJib.position.set(-CRANE_COUNTER_JIB_LENGTH / 2, CRANE_HEIGHT, 0);
+    g.add(counterJib);
+    const counterWeight = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), new THREE.MeshStandardMaterial({ color: 0x444444 }));
+    counterWeight.position.set(-CRANE_COUNTER_JIB_LENGTH, CRANE_HEIGHT - 1, 0);
+    g.add(counterWeight);
+    // gancho colgante (cable + bloque), estatico
+    const hookCable = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 12, 6), new THREE.MeshBasicMaterial({ color: 0x111111 }));
+    hookCable.position.set(CRANE_JIB_LENGTH * 0.7, CRANE_HEIGHT - 6, 0);
+    g.add(hookCable);
+    const hookBlock = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 1.2), new THREE.MeshStandardMaterial({ color: 0x333333 }));
+    hookBlock.position.set(CRANE_JIB_LENGTH * 0.7, CRANE_HEIGHT - 12, 0);
+    g.add(hookBlock);
+    g.position.set(sign * (FLOODLIGHT_OUTER_X + 6), 0, -BOARD.length / 2);
+    g.rotation.y = sign > 0 ? Math.PI : 0; // el brazo largo (jib) apunta hacia el tablero
+    g.visible = false;
+    scene.add(g);
+    craneGroups.push(g);
+  });
+  const CRANE_SPIN_SPEED = 0.12; // rad/s, giro lento y constante
+  function updateCraneSpin(dt) {
+    craneGroups.forEach(g => { if (g.visible) g.rotation.y += dt * CRANE_SPIN_SPEED; });
+  }
+
   // publico con forma de cuerpo (cilindro) + cabeza (esfera) en vez de una simple caja -
   // dos InstancedMesh que comparten indice de instancia (misma persona = mismo indice en
   // ambos), barato de renderizar hasta 200 personas
@@ -3782,6 +3823,10 @@
     floodlightGroups.forEach(g => { g.visible = floodlightsUnlocked; });
     const cafeteriasUnlocked = (seatsBuilt || 0) >= LEVEL1_SEATS_CAP;
     cafeteriaGroups.forEach(g => { g.visible = cafeteriasUnlocked; });
+    // gruas: visibles mientras quede CUALQUIER obra pendiente (aforo sin terminar o material
+    // sin llegar a premium) - desaparecen solo cuando el estadio esta 100% completo
+    const constructionInProgress = (seatsBuilt || 0) < STADIUM_TOTAL_SEATS || (materialTier || 1) < 4;
+    craneGroups.forEach(g => { g.visible = constructionInProgress; });
 
     // gente en cuadricula DENSA (separacion fija, no ligada a cuantos asientos tengas
     // comprados) - "asientos construidos" solo decide el TAMAÑO de la grada (su longitud),
@@ -4760,6 +4805,7 @@
     updateDust(dt);
     updateConfetti(dt);
     updateCrowdCelebration(dt);
+    updateCraneSpin(dt);
 
     renderer.render(scene, camera);
     requestAnimationFrame(frame);
