@@ -3695,6 +3695,16 @@
     const zPos = -standLength / 2;
     const fondoFraction = Math.min(1, fondoSeats / FONDO_MAX_SEATS);
     const fondoWidth = BOARD.widthTop * fondoFraction; // crece desde el centro hacia los lados
+    // reparto SECUENCIAL por fila (2026-09-06, feedback del usuario): con pocas semillas
+    // construidas, antes las 4 filas crecian a la vez en anchura pero cada una YA a su altura
+    // final - con poco fondo aun se veia una "torre" estrecha y alta en vez de una fila baja
+    // y ancha, quedaba raro. Ahora se completa fila por fila: primero la fila 0 (la mas baja)
+    // entera a lo ancho, luego la 1, etc. - igual que se construiria de verdad una grada.
+    function fondoRowFraction(totalSeats, maxSeats, row, rows) {
+      const perRow = maxSeats / rows;
+      const rowSeats = Math.max(0, Math.min(perRow, totalSeats - row * perRow));
+      return rowSeats / perRow;
+    }
 
     // fase 3 (2026-09-06): una vez el nivel 1 esta completo (350), el resto llena primero el
     // nivel 2 de las laterales (100 mas) y despues el nivel 2 del fondo (50 mas) - mismo
@@ -3714,10 +3724,11 @@
       mesh.scale.z = Math.max(0.001, standLength);
       mesh.position.set(mesh.userData.xCenter, mesh.userData.rowHeight / 2, zPos);
     });
-    fondoRowMeshes.forEach(mesh => {
+    fondoRowMeshes.forEach((mesh, row) => {
+      const rowWidth = BOARD.widthTop * fondoRowFraction(fondoSeats, FONDO_MAX_SEATS, row, STAND_ROWS);
       mesh.material.color.setHex(color);
-      mesh.visible = fondoWidth > 0.5;
-      mesh.scale.x = Math.max(0.001, fondoWidth);
+      mesh.visible = rowWidth > 0.5;
+      mesh.scale.x = Math.max(0.001, rowWidth);
       mesh.position.set(0, mesh.userData.rowHeight / 2, mesh.userData.zCenter);
     });
     upperStandRowMeshes.forEach(mesh => {
@@ -3726,10 +3737,11 @@
       mesh.scale.z = Math.max(0.001, upperStandLength);
       mesh.position.set(mesh.userData.xCenter, mesh.userData.rowHeight / 2, upperZPos);
     });
-    upperFondoRowMeshes.forEach(mesh => {
+    upperFondoRowMeshes.forEach((mesh, row) => {
+      const rowWidth = BOARD.widthTop * fondoRowFraction(upperFondoSeats, UPPER_FONDO_MAX_SEATS, row, STAND_ROWS);
       mesh.material.color.setHex(color);
-      mesh.visible = upperFondoWidth > 0.5;
-      mesh.scale.x = Math.max(0.001, upperFondoWidth);
+      mesh.visible = rowWidth > 0.5;
+      mesh.scale.x = Math.max(0.001, rowWidth);
       mesh.position.set(0, mesh.userData.rowHeight / 2, mesh.userData.zCenter);
     });
 
