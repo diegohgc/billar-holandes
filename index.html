@@ -3788,7 +3788,13 @@
       const fondoZ = fondoRowMeshes[row].userData.zCenter;
       const dx = fondoX - latX, dz = fondoZ - latZ;
       const dist = Math.hypot(dx, dz);
-      const visible = standLength > 0.5 && fondoWidth > 0.5 && dist > 0.5;
+      // solo se cierra la esquina cuando la grada del fondo esta COMPLETA (fondoFraction=1),
+      // no mientras se va construyendo - bug real reportado por el usuario el 2026-09-06: con
+      // pocos asientos en el fondo, el borde a cubrir estaba casi en el centro y esta pieza se
+      // estiraba tanto que parecia un tejado entero ya construido, cuando el fondo real era
+      // minusculo. Al esperar a que este al 100%, el hueco a cubrir en ese momento ya es
+      // pequeño de verdad y la pieza se ve como lo que es: un simple cierre de esquina.
+      const visible = standLength > 0.5 && fondoFraction >= 1 && dist > 0.5;
       mesh.visible = visible;
       if (visible) {
         mesh.material.color.setHex(color);
@@ -3806,7 +3812,8 @@
       const fondoZ = upperFondoRowMeshes[row].userData.zCenter;
       const dx = fondoX - latX, dz = fondoZ - latZ;
       const dist = Math.hypot(dx, dz);
-      const visible = upperStandLength > 0.5 && upperFondoWidth > 0.5 && dist > 0.5;
+      // mismo arreglo que en cornerMeshes: solo se cierra al 100% del nivel 2 del fondo
+      const visible = upperStandLength > 0.5 && upperFondoFraction >= 1 && dist > 0.5;
       mesh.visible = visible;
       if (visible) {
         mesh.material.color.setHex(color);
