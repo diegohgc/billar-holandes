@@ -899,6 +899,10 @@
   // mensual, y confundia tener 4 clasificaciones parecidas. La vista ranking/ranking_countries
   // se deja intacta en Supabase por si se quiere retomar mas adelante, solo se quita del menu.
   let rankScope = 'monthly', rankType = 'players', rankMetric = 'avg';
+  // medalla oro/plata/bronce para el podio (top 3) de la clasificación mensual y de la
+  // 1ª división de ligas - ahí no tiene sentido la flecha de ascenso ⬆️ (mensual no asciende
+  // a ningún sitio, y la 1ª división ya es la más alta, no hay división por encima)
+  const PODIUM_MEDALS = ['🥇', '🥈', '🥉'];
   function rankViewName() {
     let base = rankType === 'players' ? 'ranking' : 'ranking_countries';
     if (rankMetric === 'record') base += '_record';
@@ -936,7 +940,8 @@
       row_.className = 'scoreRow';
       if (isMine(row)) row_.style.background = 'rgba(201,138,46,0.18)';
       const label = rankType === 'players' ? row.name : row.country;
-      row_.innerHTML = `<span class="name">${t('rank', { n: i + 1 })} ${countryFlag(row.country)} ${label}</span><span>${t('ptsShort', { n: row[scoreKey] })}</span>`;
+      const medal = (rankScope === 'monthly' && i < 3) ? PODIUM_MEDALS[i] + ' ' : '';
+      row_.innerHTML = `<span class="name">${medal}${t('rank', { n: i + 1 })} ${countryFlag(row.country)} ${label}</span><span>${t('ptsShort', { n: row[scoreKey] })}</span>`;
       if (rankType === 'players') {
         row_.style.cursor = 'pointer';
         row_.addEventListener('click', () => showPlayerProfile(row.player_id, row.name, row.country, row[scoreKey]));
@@ -1010,7 +1015,8 @@
       row_.className = 'scoreRow';
       if (isMine(row)) row_.style.background = 'rgba(201,138,46,0.18)';
       let zone = '';
-      if (i < 3) zone = ' ⬆️';
+      if (myDivision === 1 && i < 3) zone = ' ' + PODIUM_MEDALS[i];
+      else if (i < 3) zone = ' ⬆️';
       else if (data.length > 3 && i >= data.length - 3) zone = ' ⬇️';
       row_.innerHTML = `<span class="name">${t('rank', { n: i + 1 })} ${countryFlag(row.country)} ${row.name}${zone}</span><span>${t('ptsShort', { n: row.week_score })}</span>`;
       listEl.appendChild(row_);
@@ -1126,7 +1132,8 @@
       const mine = currentSession && row.player_id === currentSession.user.id;
       if (mine) row_.style.background = 'rgba(201,138,46,0.18)';
       let zone = '';
-      if (i < 3) zone = ' ⬆️';
+      if (division === 1 && i < 3) zone = ' ' + PODIUM_MEDALS[i];
+      else if (i < 3) zone = ' ⬆️';
       else if (data.length > 3 && i >= data.length - 3) zone = ' ⬇️';
       row_.innerHTML = `<span class="name">${t('rank', { n: i + 1 })} ${countryFlag(row.country)} ${row.name}${zone}</span><span>${t('ptsShort', { n: row.week_score })}</span>`;
       row_.style.cursor = 'pointer';
