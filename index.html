@@ -888,6 +888,11 @@
     if (!currentProfile) return;
     Sound.ensure();
     isOnlineSoloMatch = true;
+    // consume la obra pendiente (si compraste un pack de construccion/reforma desde la ultima
+    // partida) - se aplica SOLO a esta partida que empieza ahora, ver comentario junto a
+    // consumePendingConstructionZone
+    consumePendingConstructionZone();
+    loadStadiumVisualData();
     players = [{
       name: currentProfile.name,
       isDefaultName: false,
@@ -1334,10 +1339,43 @@
     showStadiumMsg._t = setTimeout(() => { el.style.display = 'none'; }, 3200);
   }
 
+  // fase 6 (2026-09-06): grua "de obra" solo en la SIGUIENTE partida tras comprar un pack de
+  // construccion o reforma, colocada justo en la zona que se esta ampliando/reformando, y sin
+  // publico ahi esa partida (no puede haber espectadores sentados en una zona en obras). Antes
+  // las gruas se quedaban puestas de forma permanente hasta terminar el estadio ENTERO (podian
+  // ser meses) - mucho mas realista que sea solo la partida siguiente a cada compra concreta.
+  // pendingConstructionZone se guarda en localStorage (sobrevive a un cierre/recarga de la
+  // app); activeMatchConstructionZone es la que de verdad usa la escena 3D, y solo se rellena
+  // al EMPEZAR una partida online (ver startOnlineSoloMatch) - consumiendo y limpiando la
+  // pendiente, asi que solo dura esa unica partida.
+  let activeMatchConstructionZone = null;
+  const CONSTRUCTION_ZONE_STORAGE_KEY = 'puckslide_construction_zone';
+  function setPendingConstructionZone(zone) {
+    try { localStorage.setItem(CONSTRUCTION_ZONE_STORAGE_KEY, zone); } catch (e) { /* almacenamiento no disponible, no pasa nada */ }
+  }
+  function consumePendingConstructionZone() {
+    let zone = null;
+    try {
+      zone = localStorage.getItem(CONSTRUCTION_ZONE_STORAGE_KEY);
+      localStorage.removeItem(CONSTRUCTION_ZONE_STORAGE_KEY);
+    } catch (e) { /* almacenamiento no disponible, no pasa nada */ }
+    activeMatchConstructionZone = zone;
+  }
+  // segun donde caigan los asientos NUEVOS (el total ya actualizado tras la compra), identifica
+  // en que zona concreta esta la obra - mismo orden secuencial que usa updateStadiumVisual
+  function seatsBuiltToZone(seatsBuilt) {
+    if (seatsBuilt <= LATERAL_SEATS_CAP) return 'lateral';
+    if (seatsBuilt <= LEVEL1_SEATS_CAP) return 'fondo';
+    if (seatsBuilt <= LEVEL1_SEATS_CAP + UPPER_LATERAL_SEATS_CAP) return 'upperLateral';
+    return 'upperFondo';
+  }
+
   async function buyStadiumPack() {
     const { data, error } = await sb.rpc('buy_seat_pack');
     if (error) { console.error('buy_seat_pack failed:', error); return; }
     if (!data.ok) { showStadiumMsg(t('stadiumBuyFailed_' + data.reason) || t('stadiumBuyFailed_generic')); return; }
+    const { data: prof } = await sb.from('profiles').select('seats_built').eq('id', currentSession.user.id).maybeSingle();
+    if (prof) setPendingConstructionZone(seatsBuiltToZone(prof.seats_built));
     loadStadiumScreen();
     loadStadiumVisualData();
   }
@@ -1346,6 +1384,7 @@
     const { data, error } = await sb.rpc('buy_renovation_pack');
     if (error) { console.error('buy_renovation_pack failed:', error); return; }
     if (!data.ok) { showStadiumMsg(t('stadiumBuyFailed_' + data.reason) || t('stadiumBuyFailed_generic')); return; }
+    setPendingConstructionZone('renovation');
     loadStadiumScreen();
     loadStadiumVisualData();
   }
@@ -2880,6 +2919,7 @@
         // supabase-stadium-maintenance.sql) se descuenta aqui mismo, asi que si supera lo
         // ganado esta partida el balance neto sale en rojo en vez de no mostrar nada
         showCoinToast(data);
+        activeMatchConstructionZone = null; // la obra de esta partida ya se ha visto, no se repite en la pantalla de resultados
         loadStadiumVisualData(); // el aforo puede haber cambiado si esta partida movio tu posicion en la liga
       });
       isOnlineSoloMatch = false;
@@ -3490,6 +3530,7 @@
     const hookBlock = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 1.2), new THREE.MeshStandardMaterial({ color: 0x333333 }));
     hookBlock.position.set(CRANE_JIB_LENGTH * 0.7, CRANE_HEIGHT - 12, 0);
     g.add(hookBlock);
+    g.userData.sign = sign; // reutilizado para reposicionar la grua segun la zona de obra (ver updateStadiumVisual)
     g.position.set(sign * (FLOODLIGHT_OUTER_X + 6), 0, -BOARD.length / 2);
     g.rotation.y = sign > 0 ? Math.PI : 0; // el brazo largo (jib) apunta hacia el tablero
     g.visible = false;
@@ -3867,10 +3908,27 @@
     floodlightGroups.forEach(g => { g.visible = floodlightsUnlocked; });
     const cafeteriasUnlocked = (seatsBuilt || 0) >= LEVEL1_SEATS_CAP;
     cafeteriaGroups.forEach(g => { g.visible = cafeteriasUnlocked; });
-    // gruas: visibles mientras quede CUALQUIER obra pendiente (aforo sin terminar o material
-    // sin llegar a premium) - desaparecen solo cuando el estadio esta 100% completo
-    const constructionInProgress = (seatsBuilt || 0) < STADIUM_TOTAL_SEATS || (materialTier || 1) < 4;
-    craneGroups.forEach(g => { g.visible = constructionInProgress; });
+    // gruas (fase 6, 2026-09-06): visibles SOLO durante la partida siguiente a haber comprado
+    // un pack de construccion/reforma (ver activeMatchConstructionZone, consumido en
+    // startOnlineSoloMatch) - colocadas junto a la zona exacta que se esta ampliando/reformando.
+    // Antes se quedaban puestas de forma permanente hasta terminar el estadio ENTERO (podian
+    // ser meses de partidas) - mucho mas realista que sea solo esa unica partida.
+    const zone = activeMatchConstructionZone;
+    const craneVisible = !!zone;
+    craneGroups.forEach(g => {
+      g.visible = craneVisible;
+      if (!craneVisible) return;
+      const sign = g.userData.sign;
+      if (zone === 'fondo' || zone === 'upperFondo') {
+        // junto a la grada del fondo, una a cada lado de la porteria
+        g.position.set(sign * 18, 0, -(BOARD.length + BOARD.gateDepth + FONDO_MARGIN + 10));
+        g.rotation.y = sign > 0 ? -Math.PI / 2 : Math.PI / 2;
+      } else {
+        // laterales, nivel 1 o 2, o reforma generica: posicion de siempre junto a las gradas
+        g.position.set(sign * (FLOODLIGHT_OUTER_X + 6), 0, -BOARD.length / 2);
+        g.rotation.y = sign > 0 ? Math.PI : 0;
+      }
+    });
 
     // gente en cuadricula DENSA (separacion fija, no ligada a cuantos asientos tengas
     // comprados) - "asientos construidos" solo decide el TAMAÑO de la grada (su longitud),
@@ -3965,6 +4023,8 @@
     }
 
     [-1, 1].forEach(sign => {
+      // sin publico mientras esta zona esta "en obras" esta partida (ver activeMatchConstructionZone)
+      if (zone === 'lateral') return;
       if (standLength <= 0) return;
       const cols = Math.max(1, Math.floor(standLength / PERSON_SPACING_Z));
       const colSpacing = standLength / cols;
@@ -4000,7 +4060,7 @@
     // para las 4 - si no, la gente de las filas altas (aun sin construir) aparecia flotando
     // por encima de la porteria, sobre una fila que ni siquiera existe todavia (bug real
     // reportado por el usuario el 2026-09-06).
-    for (let row = 0; row < STAND_ROWS; row++) {
+    for (let row = 0; row < STAND_ROWS && zone !== 'fondo'; row++) {
       const rowWidth = BOARD.widthTop * fondoRowFraction(fondoSeats, FONDO_MAX_SEATS, row, STAND_ROWS);
       if (rowWidth <= 0.5) continue;
       const rowHeight = STAND_ROW_HEIGHTS[row];
@@ -4024,6 +4084,7 @@
     // nivel 2 (fase 3, 2026-09-06): mismo patron que el nivel 1, con UPPER_ROW_HEIGHTS y las
     // filas de upperStandRowMeshes/upperFondoRowMeshes en vez de las del nivel 1
     [-1, 1].forEach(sign => {
+      if (zone === 'upperLateral') return;
       if (upperStandLength <= 0) return;
       const cols = Math.max(1, Math.floor(upperStandLength / PERSON_SPACING_Z));
       const colSpacing = upperStandLength / cols;
@@ -4049,7 +4110,7 @@
       }
     });
     // mismo arreglo que en la grada del fondo del nivel 1: cada fila tiene su propio ancho
-    for (let row = 0; row < STAND_ROWS; row++) {
+    for (let row = 0; row < STAND_ROWS && zone !== 'upperFondo'; row++) {
       const rowWidth = BOARD.widthTop * fondoRowFraction(upperFondoSeats, UPPER_FONDO_MAX_SEATS, row, STAND_ROWS);
       if (rowWidth <= 0.5) continue;
       const rowHeight = UPPER_ROW_HEIGHTS[row];
