@@ -3962,9 +3962,14 @@
       if (!craneVisible) return;
       const sign = g.userData.sign;
       if (zone === 'fondo' || zone === 'upperFondo') {
-        // junto a la grada del fondo, una a cada lado de la porteria
+        // junto a la grada del fondo, una a cada lado de la porteria. El brazo (jib) apunta
+        // hacia el centro (eje X, como en la rama de abajo) y NO hacia la porteria (eje Z):
+        // la camara mira "por el pasillo" del tablero (a lo largo de Z), asi que un brazo en
+        // esa direccion queda de canto y practicamente invisible - se veia solo el mastil, un
+        // simple palo vertical (reportado por el usuario el 2026-09-06). Girado hacia los
+        // lados se ve como una grua de verdad desde la camara de juego.
         g.position.set(sign * 18, 0, -(BOARD.length + BOARD.gateDepth + FONDO_MARGIN + 10));
-        g.rotation.y = sign > 0 ? -Math.PI / 2 : Math.PI / 2;
+        g.rotation.y = sign > 0 ? Math.PI : 0;
       } else {
         // laterales, nivel 1 o 2, o reforma generica: posicion de siempre junto a las gradas
         g.position.set(sign * (FLOODLIGHT_OUTER_X + 6), 0, -BOARD.length / 2);
