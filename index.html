@@ -3584,6 +3584,58 @@
     craneGroups.forEach(g => { if (g.visible) g.rotation.y += dt * CRANE_SPIN_SPEED; });
   }
 
+  // ---- paisaje exterior (fase 7, 2026-09-06): el estadio ya no flota en un vacio negro liso -
+  // pedido por el usuario tras notar que el brazo de la grua se veia mal sin nada detras con lo
+  // que hacer contraste. Una llanura de cesped alrededor de las gradas y, mas alla, la silueta
+  // de una ciudad nocturna recortada contra el cielo (el estadio esta al aire libre, no metido
+  // en una caja). Todo muy barato: una malla circular + un cilindro abierto con una textura de
+  // canvas (nada de modelos 3D ni texturas descargadas), para no afectar el rendimiento en
+  // moviles de gama baja (ver nota del Samsung A70 en stepPuck). ----
+  const groundMat = new THREE.MeshStandardMaterial({ color: 0x141d0f, roughness: 1 });
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(650, 48), groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -0.05; // ligeramente por debajo de las gradas/tablero, evita z-fighting
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // textura de canvas con la silueta de edificios (opacos) sobre fondo transparente - se ve el
+  // cielo nocturno por encima de los tejados. Unas pocas ventanas iluminadas al azar por edificio.
+  function makeSkylineTexture() {
+    const w = 2048, h = 256;
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const cx = c.getContext('2d');
+    let x = 0;
+    while (x < w) {
+      const bw = 40 + Math.random() * 90;
+      const bh = 60 + Math.random() * 150;
+      const shade = 10 + Math.floor(Math.random() * 12);
+      cx.fillStyle = `rgb(${shade},${shade},${shade + 6})`;
+      cx.fillRect(x, h - bh, bw, bh);
+      const cols = Math.max(1, Math.floor(bw / 10));
+      const rows = Math.max(1, Math.floor(bh / 14));
+      for (let wx = 0; wx < cols; wx++) {
+        for (let wy = 0; wy < rows; wy++) {
+          if (Math.random() < 0.18) {
+            cx.fillStyle = 'rgba(255,210,140,0.85)';
+            cx.fillRect(x + 4 + wx * 10, h - bh + 6 + wy * 14, 4, 6);
+          }
+        }
+      }
+      x += bw + 2 + Math.random() * 6;
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = THREE.RepeatWrapping;
+    return tex;
+  }
+  const skylineRadius = 560;
+  const skylineMat = new THREE.MeshBasicMaterial({
+    map: makeSkylineTexture(), transparent: true, side: THREE.BackSide, depthWrite: false,
+  });
+  skylineMat.fog = false; // que no se difumine con la niebla del tablero - es el propio horizonte
+  const skyline = new THREE.Mesh(new THREE.CylinderGeometry(skylineRadius, skylineRadius, 130, 48, 1, true), skylineMat);
+  skyline.position.y = 65;
+  scene.add(skyline);
+
   // publico con forma de cuerpo (cilindro) + cabeza (esfera) en vez de una simple caja -
   // dos InstancedMesh que comparten indice de instancia (misma persona = mismo indice en
   // ambos), barato de renderizar hasta 200 personas
