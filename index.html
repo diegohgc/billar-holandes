@@ -4146,6 +4146,18 @@
     return new THREE.CanvasTexture(c);
   }
   const headMat = new THREE.MeshStandardMaterial({ roughness: 0.85, map: makeFaceTexture() });
+  // pelo (2026-09-07, feedback del usuario: "las cabezas parecen bolas de billar, ¿pueden
+  // tener forma humana de verdad y con pelo?") - un "gorro" barato en vez de mechones reales:
+  // un casquete esferico un pelin mas grande que la cabeza, cubriendo desde arriba hasta un
+  // poco mas abajo del ecuador (asi tapa tambien las orejas/sienes, no solo la coronilla) -
+  // mismo patron que piernas/brazos, un InstancedMesh mas, color por persona via instanceColor.
+  const HAIR_COLORS = [0x2b1a10, 0x1a1410, 0x5c3a1e, 0x8a6a3a, 0xd8c088, 0x3a3a3a, 0x9c1f1f];
+  const hairGeo = new THREE.SphereGeometry(HEAD_RADIUS * 1.08, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.62);
+  const hairMat = new THREE.MeshStandardMaterial({ roughness: 0.95 });
+  const hairMesh = new THREE.InstancedMesh(hairGeo, hairMat, STADIUM_MAX_PEOPLE);
+  hairMesh.castShadow = true;
+  hairMesh.frustumCulled = false; // mismo motivo que peopleBodyMesh/peopleHeadMesh
+  hairMesh.count = 0;
   const peopleBodyMesh = new THREE.InstancedMesh(bodyGeo, bodyMat, STADIUM_MAX_PEOPLE);
   const peopleHeadMesh = new THREE.InstancedMesh(headGeo, headMat, STADIUM_MAX_PEOPLE);
   peopleBodyMesh.castShadow = peopleHeadMesh.castShadow = true;
@@ -4159,7 +4171,7 @@
   // mallas fijas del propio estadio, siempre deberian estar visibles de todos modos.
   peopleBodyMesh.frustumCulled = peopleHeadMesh.frustumCulled = false;
   peopleBodyMesh.count = peopleHeadMesh.count = 0;
-  standGroup.add(peopleBodyMesh, peopleHeadMesh, legsMesh, armsMesh);
+  standGroup.add(peopleBodyMesh, peopleHeadMesh, legsMesh, armsMesh, hairMesh);
 
   // banderitas del pais del jugador, unas pocas repartidas entre el publico (1 de cada 6
   // asistentes) - una sola textura (el emoji de bandera dibujado en un canvas) reutilizada
@@ -4267,6 +4279,7 @@
       dummyHead.rotation.set(0, rotY, 0);
       dummyHead.updateMatrix();
       peopleHeadMesh.setMatrixAt(i, dummyHead.matrix);
+      hairMesh.setMatrixAt(i, dummyHead.matrix); // mismo sitio que la cabeza, ver placePerson
 
       // piernas: saltan con el mismo desplazamiento que el resto del cuerpo, calculando su
       // separacion lateral a partir de rotY (ya guardado por persona) sin necesitar arrays nuevos
@@ -4293,6 +4306,7 @@
     peopleBodyMesh.instanceMatrix.needsUpdate = peopleHeadMesh.instanceMatrix.needsUpdate = true;
     legsMesh.instanceMatrix.needsUpdate = true;
     armsMesh.instanceMatrix.needsUpdate = true;
+    hairMesh.instanceMatrix.needsUpdate = true;
     if (finished) crowdCelebrationT = null;
   }
 
@@ -4515,6 +4529,7 @@
     const dummyArm = new THREE.Object3D();
     const clothes = new THREE.Color();
     const skin = new THREE.Color();
+    const hair = new THREE.Color();
     const flagTex = getFlagTexture(countryCode);
     flagMat.map = flagTex;
     flagMat.needsUpdate = true;
@@ -4570,6 +4585,9 @@
       peopleHeadMesh.setMatrixAt(instanceIdx, dummyHead.matrix);
       skin.setHex(SKIN_COLORS[Math.floor(Math.random() * SKIN_COLORS.length)]);
       peopleHeadMesh.setColorAt(instanceIdx, skin);
+      hairMesh.setMatrixAt(instanceIdx, dummyHead.matrix); // mismo sitio/rotacion que la cabeza
+      hair.setHex(HAIR_COLORS[Math.floor(Math.random() * HAIR_COLORS.length)]);
+      hairMesh.setColorAt(instanceIdx, hair);
 
       // guardamos la posicion base de esta persona para poder animarla saltando cuando se
       // complete un SET (ver triggerCrowdCelebration/updateCrowdCelebration) sin tener que
@@ -4705,10 +4723,13 @@
     }
 
     peopleBodyMesh.count = peopleHeadMesh.count = instanceIdx;
+    hairMesh.count = instanceIdx;
     crowdCount = instanceIdx;
     peopleBodyMesh.instanceMatrix.needsUpdate = peopleHeadMesh.instanceMatrix.needsUpdate = true;
+    hairMesh.instanceMatrix.needsUpdate = true;
     if (peopleBodyMesh.instanceColor) peopleBodyMesh.instanceColor.needsUpdate = true;
     if (peopleHeadMesh.instanceColor) peopleHeadMesh.instanceColor.needsUpdate = true;
+    if (hairMesh.instanceColor) hairMesh.instanceColor.needsUpdate = true;
     legsMesh.count = instanceIdx * 2;
     legsMesh.instanceMatrix.needsUpdate = true;
     if (legsMesh.instanceColor) legsMesh.instanceColor.needsUpdate = true;
