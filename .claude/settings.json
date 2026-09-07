@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Preview__preview_console_logs",
+      "mcp__Claude_Browser__read_console_messages",
+      "mcp__Claude_Browser__find",
+      "mcp__visualize__read_me",
+      "mcp__Claude_Browser__read_page",
+      "mcp__Claude_Preview__preview_list",
+      "mcp__Claude_Browser__tabs_context",
+      "Bash(curl -s -o /dev/null -w *)",
+      "Bash(curl -sI *)"
+    ],
+    "defaultMode": "bypassPermissions"
+  }
+}
