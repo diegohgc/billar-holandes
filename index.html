@@ -5368,6 +5368,13 @@
       .some(el => el && el.style.display !== 'none' && el.style.display !== '');
   }
   function updateShotTimer(dt) {
+    // 2026-09-07 (bug reportado por el usuario): la cuenta atras arrancaba en cuanto empezaba
+    // la partida, aunque el jugador todavia no pudiera ver ni tocar el tablero porque estaba
+    // en mitad del barrido de camara inicial (startDroneIntro) - con la duracion de ese barrido
+    // subida hace poco de 5 a 8s, se comia CASI TODO el tiempo de la cuenta atras (READY_TIME
+    // tambien son 8s) antes de que el jugador pudiera hacer nada. Mientras dura el barrido, la
+    // cuenta atras se congela en vez de correr.
+    if (droneIntroT !== null) return;
     if (gamePhase !== 'playing' || !puck || puck.state !== 'ready' || anyOverlayOpen()) {
       if ((!puck || puck.state !== 'ready') && shotTimerPhase) clearShotTimer();
       else updateTimerDisplay();
