@@ -5423,7 +5423,11 @@
   // una pasada rasante por el centro -> sube y retrocede hasta la vista de reposo de siempre.
   // Tambien se oye al publico "cantar" (el mismo sonido de celebracion del SET) durante el
   // vuelo, escalado por la afluencia real del estadio igual que en onDiscScored.
-  const DRONE_INTRO_DURATION = 5;
+  // subido de 5 a 8s (2026-09-07, feedback: "la animacion es tan rapida que apenas se
+  // percibe") - con la ciudad/arboles/carretera/parking nuevos hay mucho mas que ver en el
+  // barrido inicial, y a 5s pasaba demasiado rapido para notarlo
+  const DRONE_INTRO_DURATION = 8;
+  const DRONE_INTRO_HOLD_FRAC = 0.18; // primer tramo: camara quieta en el punto de partida, tiempo para ver el paisaje antes de empezar a moverse
   let droneIntroT = null;
   const droneStartPos = new THREE.Vector3();
   const droneGroundPos = new THREE.Vector3();
@@ -5450,12 +5454,19 @@
     if (droneIntroT === null) return false;
     droneIntroT += dt;
     const tt = Math.min(1, droneIntroT / DRONE_INTRO_DURATION);
-    if (tt < 0.5) {
-      // primera mitad: del punto de partida a la pasada rasante
-      camera.position.lerpVectors(droneStartPos, droneGroundPos, easeInOutCubic(tt / 0.5));
+    if (tt < DRONE_INTRO_HOLD_FRAC) {
+      // tramo quieto: la camara se queda en el punto de partida (vista amplia del exterior -
+      // ciudad, arboles, carretera, parking) antes de empezar el barrido
+      camera.position.copy(droneStartPos);
     } else {
-      // segunda mitad: de la pasada rasante sube hasta la vista de reposo de siempre
-      camera.position.lerpVectors(droneGroundPos, restCamPos, easeInOutCubic((tt - 0.5) / 0.5));
+      const t2 = (tt - DRONE_INTRO_HOLD_FRAC) / (1 - DRONE_INTRO_HOLD_FRAC);
+      if (t2 < 0.5) {
+        // primer tramo del barrido: del punto de partida a la pasada rasante
+        camera.position.lerpVectors(droneStartPos, droneGroundPos, easeInOutCubic(t2 / 0.5));
+      } else {
+        // segundo tramo: de la pasada rasante sube hasta la vista de reposo de siempre
+        camera.position.lerpVectors(droneGroundPos, restCamPos, easeInOutCubic((t2 - 0.5) / 0.5));
+      }
     }
     camera.lookAt(restCamLook);
     if (tt >= 1) droneIntroT = null;
