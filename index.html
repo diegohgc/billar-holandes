@@ -3698,14 +3698,26 @@
     g.add(hookBlock);
     g.userData.sign = sign; // reutilizado para reposicionar la grua segun la zona de obra (ver updateStadiumVisual)
     g.position.set(sign * (FLOODLIGHT_OUTER_X + 6), 0, -BOARD.length / 2);
-    g.rotation.y = sign > 0 ? Math.PI : 0; // el brazo largo (jib) apunta hacia el tablero
+    g.userData.baseRotationY = sign > 0 ? Math.PI : 0; // el brazo largo (jib) apunta hacia el tablero
+    g.rotation.y = g.userData.baseRotationY;
     g.visible = false;
     scene.add(g);
     craneGroups.push(g);
   });
-  const CRANE_SPIN_SPEED = 0.12; // rad/s, giro lento y constante
+  // 2026-09-07: el giro CONTINUO (360 grados sin parar) volvia a reproducir el bug ya
+  // arreglado del brazo "de canto" hacia la camara ("eso del medio que sobresale hacia
+  // arriba, ¿no deberia estar ahi?", reportado por el usuario) - la orientacion inicial del
+  // brazo se corrigio para que apunte hacia el centro (visible desde la camara de juego),
+  // pero un giro completo pasa inevitablemente por la orientacion "de canto" en cada vuelta.
+  // Ahora en vez de girar sin parar, se balancea suavemente (+-20 grados) alrededor de esa
+  // orientacion ya corregida - se sigue viendo "trabajando" sin llegar nunca a quedar de canto.
+  const CRANE_SWING_SPEED = 0.5; // rad/s del reloj interno del balanceo (no del angulo en si)
+  const CRANE_SWING_AMPLITUDE = 0.35; // ~20 grados a cada lado de la orientacion base
+  let craneSwingT = 0;
   function updateCraneSpin(dt) {
-    craneGroups.forEach(g => { if (g.visible) g.rotation.y += dt * CRANE_SPIN_SPEED; });
+    craneSwingT += dt;
+    const offset = Math.sin(craneSwingT * CRANE_SWING_SPEED) * CRANE_SWING_AMPLITUDE;
+    craneGroups.forEach(g => { if (g.visible) g.rotation.y = g.userData.baseRotationY + offset; });
   }
 
   // ---- paisaje exterior (fase 7, 2026-09-06, varias rondas de retoques tras feedback del
@@ -4475,11 +4487,11 @@
         // simple palo vertical (reportado por el usuario el 2026-09-06). Girado hacia los
         // lados se ve como una grua de verdad desde la camara de juego.
         g.position.set(sign * 18, 0, -(BOARD.length + BOARD.gateDepth + FONDO_MARGIN + 10));
-        g.rotation.y = sign > 0 ? Math.PI : 0;
+        g.userData.baseRotationY = sign > 0 ? Math.PI : 0; // ver updateCraneSpin - balanceo alrededor de esta orientacion
       } else {
         // laterales, nivel 1 o 2, o reforma generica: posicion de siempre junto a las gradas
         g.position.set(sign * (FLOODLIGHT_OUTER_X + 6), 0, -BOARD.length / 2);
-        g.rotation.y = sign > 0 ? Math.PI : 0;
+        g.userData.baseRotationY = sign > 0 ? Math.PI : 0;
       }
     });
 
