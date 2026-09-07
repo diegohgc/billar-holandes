@@ -4117,7 +4117,35 @@
   const bodyGeo = new THREE.CapsuleGeometry(TORSO_RADIUS, Math.max(0.05, TORSO_HEIGHT - TORSO_RADIUS * 2), 4, 12);
   const headGeo = new THREE.SphereGeometry(HEAD_RADIUS, 14, 10);
   const bodyMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
-  const headMat = new THREE.MeshStandardMaterial({ roughness: 0.85 });
+  // cara sencilla (2026-09-07, feedback del usuario: "la gente no tiene caras o parece que
+  // esta de espaldas") - antes la cabeza era una esfera lisa sin ningun rasgo, asi que
+  // SIEMPRE parecia la nuca sin importar hacia donde mirase esa persona. Textura de canvas
+  // con dos ojos y una boca sobre fondo blanco (el blanco no altera el color de piel, que
+  // sigue viniendo del instanceColor por persona - ver SKIN_COLORS) pintada justo en la
+  // franja de la esfera que queda "de frente" segun la formula de rotY que ya usan las
+  // piernas/brazos (perpendicular a como se separan las piernas, ver placePerson) - asi la
+  // cara siempre mira hacia el mismo lado al que mira el resto del cuerpo.
+  function makeFaceTexture() {
+    const w = 128, h = 64;
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const cx = c.getContext('2d');
+    cx.fillStyle = '#ffffff';
+    cx.fillRect(0, 0, w, h);
+    // franja "de frente" centrada en u=0.25 (equator +Z con rotY=0, ver comentario de mas
+    // arriba) - ojos y boca dentro de ese rango horizontal
+    const cxFace = w * 0.25;
+    cx.fillStyle = '#2a2018';
+    [-7, 7].forEach(dx => {
+      cx.beginPath();
+      cx.ellipse(cxFace + dx, h * 0.44, 2.6, 3.2, 0, 0, Math.PI * 2);
+      cx.fill();
+    });
+    cx.beginPath();
+    cx.ellipse(cxFace, h * 0.62, 5, 2.2, 0, 0, Math.PI);
+    cx.fill();
+    return new THREE.CanvasTexture(c);
+  }
+  const headMat = new THREE.MeshStandardMaterial({ roughness: 0.85, map: makeFaceTexture() });
   const peopleBodyMesh = new THREE.InstancedMesh(bodyGeo, bodyMat, STADIUM_MAX_PEOPLE);
   const peopleHeadMesh = new THREE.InstancedMesh(headGeo, headMat, STADIUM_MAX_PEOPLE);
   peopleBodyMesh.castShadow = peopleHeadMesh.castShadow = true;
