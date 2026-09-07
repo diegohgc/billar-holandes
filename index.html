@@ -59,6 +59,14 @@
   }
   #soundBtn, #musicBtn { padding: 5px 9px; margin-right: 4px; }
   #exitBtn { margin-left: 4px; border-color: #c9463288; background: rgba(201,70,50,0.18); }
+  /* 2026-09-07 (feedback del usuario: "el boton para mutear la musica apenas se ve por el
+     color que tiene") - el tono ambar translucido de scoreboardBtn/exitBtn se confunde con
+     el fondo del HUD para este boton en concreto, asi que aqui usamos un color mas vivo y
+     saturado en vez del ambar apagado de siempre. Con musica activada se ve en un verde
+     vivo (misma familia que el resto de "todo bien" de la app, ver timer #6fcf6f); en
+     silencio pasa a un gris neutro bien visible que deja claro que esta apagada. */
+  #musicBtn { border-color: #6fcf6f; background: rgba(111,207,111,0.35); }
+  #musicBtn.isMuted { border-color: #9a9a9a; background: rgba(154,154,154,0.35); }
   #timer {
     width: 34px; height: 34px; border-radius: 50%; z-index: 10; display: none;
     background: rgba(20,12,5,0.7); border: 2px solid #6fcf6f; color: #cdeecd;
@@ -2320,6 +2328,7 @@
   document.getElementById('musicBtn').addEventListener('click', (e) => {
     const on = Sound.toggleMusic();
     e.currentTarget.textContent = on ? '🎵' : '🔕';
+    e.currentTarget.classList.toggle('isMuted', !on);
   });
   document.getElementById('closeScoreboardBtn').addEventListener('click', () => {
     scoreboardPanelEl.style.display = 'none';
