@@ -1684,57 +1684,30 @@
       return ctx;
     }
 
-    // ---- ambient background music: a soft, slow chord pad that loops forever underneath the
-    // game, kept clearly quieter than the sound effects (effects peak around 0.16-0.5, this
-    // stays around 0.05) so it never competes with them, just fills the silence ----
-    let musicGain = null, musicStarted = false, musicChordIdx = 0, musicStepIdx = 0;
+    // ---- ambient background music (2026-09-07): grabacion real (audio/background-music.mp3,
+    // elegida por el usuario) en bucle, en vez del arpegio procedural de antes - pedido
+    // explicitamente "que suene sutilmente", asi que se mantiene el mismo volumen bajo
+    // (MUSIC_BASE_GAIN) que ya tenia el arpegio, claramente por debajo de los efectos de
+    // sonido (que llegan a 0.16-0.5) para que nunca compita con ellos, solo llene el silencio.
+    // Se carga una sola vez (fetch + decodeAudioData, mismo patron que crowd-cheer.mp3) y se
+    // reproduce en un unico AudioBufferSourceNode con loop=true.
+    let musicGain = null, musicStarted = false, musicSourceNode = null;
     const MUSIC_BASE_GAIN = 0.05;
-    const MUSIC_NOTE_SECONDS = 0.22;
-    const MUSIC_ARPEGGIO_PATTERN = [0, 1, 2, 3, 2, 1]; // little up-down bounce through the chord
-    // a bright, bouncy little marimba-like arpeggio (not a held pad) through the classic
-    // upbeat C - G - Am - F pop progression - playful and cheerful rather than a slow, dramatic
-    // soundtrack. Am is kept in a high, bright register so it still feels light, not moody.
-    const MUSIC_CHORDS = [
-      [261.63, 329.63, 392.00, 523.25], // C
-      [392.00, 493.88, 587.33, 783.99], // G
-      [440.00, 523.25, 659.26, 880.00], // Am
-      [349.23, 440.00, 523.25, 698.46], // F
-    ];
-    function playMusicNote(freq) {
-      const c = ctx; if (!c || !musicGain) return;
-      const now = c.currentTime;
-      const osc = c.createOscillator();
-      osc.type = 'triangle';
-      osc.frequency.value = freq;
-      const filter = c.createBiquadFilter();
-      filter.type = 'lowpass';
-      filter.frequency.value = 2800;
-      const g = c.createGain();
-      g.gain.setValueAtTime(0.0001, now);
-      g.gain.linearRampToValueAtTime(0.24, now + 0.015);
-      g.gain.exponentialRampToValueAtTime(0.0001, now + MUSIC_NOTE_SECONDS * 1.9);
-      osc.connect(filter).connect(g).connect(musicGain);
-      osc.start(now);
-      osc.stop(now + MUSIC_NOTE_SECONDS * 2);
-    }
-    function scheduleNextNote() {
-      if (!ctx) return;
-      // keep the timer chain alive but skip actually playing notes while the tab/app is in the
-      // background - otherwise the music (and any queued effects) keep running and audibly leak
-      // through even after leaving the page, until the app is force-closed
-      if (!document.hidden) {
-        const chord = MUSIC_CHORDS[musicChordIdx % MUSIC_CHORDS.length];
-        const noteFreq = chord[MUSIC_ARPEGGIO_PATTERN[musicStepIdx % MUSIC_ARPEGGIO_PATTERN.length]];
-        playMusicNote(noteFreq);
-        musicStepIdx++;
-        if (musicStepIdx % MUSIC_ARPEGGIO_PATTERN.length === 0) musicChordIdx++;
+    let musicBufferPromise = null;
+    function getMusicBuffer() {
+      if (!musicBufferPromise) {
+        musicBufferPromise = fetch('audio/background-music.mp3')
+          .then(r => r.arrayBuffer())
+          .then(ab => ctx.decodeAudioData(ab))
+          .catch(e => { console.error('background-music.mp3 load failed:', e); musicBufferPromise = null; return null; });
       }
-      setTimeout(scheduleNextNote, MUSIC_NOTE_SECONDS * 1000);
+      return musicBufferPromise;
     }
-    // belt-and-braces: also fully suspend the audio engine itself when the app is backgrounded
-    // (covers sound effects too, not just the music loop above), and resume it when it comes
-    // back to the foreground - a WebView keeps running JS in the background by default, so
-    // without this the audio just kept going until the app was force-closed
+    // belt-and-braces: suspende el motor de audio entero (musica Y efectos) cuando la app pasa
+    // a segundo plano, y lo reanuda al volver - una WebView sigue ejecutando JS en segundo
+    // plano por defecto, asi que sin esto el audio seguiria sonando hasta forzar el cierre de
+    // la app. Al suspender el AudioContext, el AudioBufferSourceNode en bucle tambien se
+    // congela (no hace falta pausarlo aparte).
     document.addEventListener('visibilitychange', () => {
       if (!ctx) return;
       if (document.hidden) ctx.suspend();
@@ -1746,7 +1719,14 @@
       musicGain = ctx.createGain();
       musicGain.gain.value = (enabled && musicOn) ? MUSIC_BASE_GAIN : 0;
       musicGain.connect(ctx.destination);
-      scheduleNextNote();
+      getMusicBuffer().then(buffer => {
+        if (!buffer || !ctx || !musicGain) return;
+        musicSourceNode = ctx.createBufferSource();
+        musicSourceNode.buffer = buffer;
+        musicSourceNode.loop = true;
+        musicSourceNode.connect(musicGain);
+        musicSourceNode.start(0);
+      });
     }
     // a short wooden "thock": a damped low body tone plus a filtered noise click,
     // both scaled by the impact strength (0..1)
