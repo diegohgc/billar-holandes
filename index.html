@@ -3185,11 +3185,16 @@
   // si es de dia") - cielo azul claro, mismo tono para la niebla del horizonte
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x8fc8ec);
-  scene.fog = new THREE.Fog(0x8fc8ec, 420, 900); // final subido de 620 a 900 (2026-09-06): con
-  // 620 la ciudad de fondo (ver "paisaje exterior" mas abajo) se lavaba casi invisible contra el
-  // cielo antes de que se le pudiera distinguir ningun detalle
+  // 2026-09-13 (feedback del usuario: "al principio de la animacion los edificios no se ven
+  // porque parece que hay niebla, me gustaria que se vieran desde el principio"): el barrido
+  // inicial (droneStartPos) arranca desplazado del centro (+220 en X, +230 en Z respecto a
+  // restCamPos) - desde ahi, un edificio en el lado OPUESTO del anillo (radio hasta 600)
+  // puede quedar a ~880-900 unidades de distancia, justo en el limite (o mas alla) del
+  // final de niebla de 900 que ya se habia subido una vez el 2026-09-06 por el mismo motivo.
+  // Subido otra vez, con mas margen esta vez (1100), y el plano lejano de la camara con el.
+  scene.fog = new THREE.Fog(0x8fc8ec, 420, 1100);
 
-  const camera = new THREE.PerspectiveCamera(42, 1, 1, 1000);
+  const camera = new THREE.PerspectiveCamera(42, 1, 1, 1200);
 
   // resting framing (whole lane visible) vs. follow framing (closer, tracks the puck while it flies)
   const restCamPos = new THREE.Vector3();
@@ -3671,17 +3676,22 @@
       mastGroup.add(brace);
     });
 
-    // cabeza del foco: PlaneGeometry mira por defecto hacia +Z (normal (0,0,1)) - girando
-    // +90 grados en X esa normal pasa a (0,-1,0), es decir recto hacia ABAJO, hacia el campo.
-    // 2026-09-13 (corregido tras el 2o intento, feedback del usuario: "los focos... estan
-    // orientados hacia la camara... parece que estan alumbrando el cielo"): antes el signo
-    // estaba al reves (rotation.x = -0.55 en vez de +), lo que dejaba la normal apuntando
-    // sobre todo hacia +Z y algo hacia +Y (arriba) - literalmente lo contrario de "hacia el
-    // campo". Con +Math.PI/2 la normal es exactamente (0,-1,0): mire desde donde se mire, el
-    // panel siempre esta claramente orientado hacia abajo, no hacia la camara ni el cielo.
+    // cabeza del foco: PlaneGeometry mira por defecto hacia +Z (normal (0,0,1)).
+    // 2026-09-13, QUINTO intento (feedback del usuario: "que apunten todas AL CENTRO DE LA
+    // PISTA" - los intentos anteriores calculaban el angulo A MANO con trigonometria, y dos
+    // veces seguidas me equivoque con el signo/la composicion de rotaciones de Three.js).
+    // Se usa Object3D.lookAt(), verificado paso a paso midiendo directamente el eje del
+    // objeto (no solo mirando una captura): para un Group normal (no una camara), lookAt()
+    // orienta el eje +Z LOCAL hacia el objetivo (medido con transformDirection). Bombillas y
+    // cabeza van en +Z, su lado natural.
+    // SEXTO intento (feedback: "que converja en toda la pista por igual y uniformemente,
+    // visualmente queda raro" - las 4 apuntando al MISMO punto central se veia como un unico
+    // foco muy intenso en medio del campo, no como la pista entera iluminada): ahora cada
+    // pareja apunta al centro de SU mitad del campo (las de este lado a -50, las del fondo a
+    // -150, en vez de las 4 a -100) - entre las 4, con el cono ancho, cubren el campo entero
+    // de forma mas pareja en vez de converger todas en el mismo punto.
     const headGroup = new THREE.Group();
     headGroup.position.y = FLOODLIGHT_POLE_HEIGHT;
-    headGroup.rotation.x = Math.PI / 2;
     mastGroup.add(headGroup);
     const headMat = new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 0.7 });
     const head = new THREE.Mesh(new THREE.BoxGeometry(9, 5.5, 1.4), headMat);
@@ -3696,12 +3706,54 @@
         headGroup.add(bulb);
       }
     }
+    // 2026-09-13 (ultima vuelta, "olvidate de los cruces de halos, difumina la iluminacion y
+    // simplemente que iluminen ligeramente la pista"): se quita el cono de luz por foco (eran
+    // esos los que se cruzaban entre si, visibles como aspas) - la iluminacion ahora es UN
+    // solo resplandor compartido cubriendo toda la pista (ver floodlightGlow, mas abajo),
+    // nada por cada torreta individual.
 
     g.position.set(px, 0, pz);
     g.visible = false;
     scene.add(g);
+    g.updateWorldMatrix(true, true);
+    const aimZ = pz < -100 ? -BOARD.length * 0.75 : -BOARD.length * 0.25; // cada pareja a su mitad del campo
+    headGroup.lookAt(0, 0, aimZ);
     floodlightGroups.push(g);
   });
+
+  // resplandor en el cesped - 2026-09-13 (feedback del usuario: "que converja en toda la
+  // pista por igual y uniformemente, visualmente queda raro" un unico circulo pequeño en el
+  // centro): antes era un solo circulo de 90x90 en el centro exacto, se veia como un charco
+  // de luz aislado en medio del cesped en vez de la pista entera iluminada. Ahora es una
+  // franja larga (rectangulo con los bordes difuminados via canvas blur) que cubre casi todo
+  // el largo del tablero, para que la zona iluminada se lea como "toda la pista", no un punto.
+  // 2026-09-13 (otra vuelta, "quiero que no se noten tanto los halos, simplemente que la
+  // pista se ilumine un poquito mas, los halos muy muy difusos"): mucho menos opacidad y
+  // mucho mas difuminado.
+  // 2026-09-13 (vuelta final, "que iluminen toda la pista al cien por cien, olvidate de los
+  // cruces de halos, difumina la iluminacion y simplemente que iluminen ligeramente la
+  // pista"): se quitan los conos de cada torreta (ver mas arriba) y este resplandor unico
+  // pasa a cubrir el ANCHO COMPLETO del tablero (antes era una franja estrecha por el medio)
+  // ademas de todo el largo - un tinte casi solido, muy tenue, con solo un borde difuminado
+  // fino para que no se note el canto - el efecto es "la pista entera un poco mas clara", no
+  // una forma de luz reconocible.
+  function makeFloodlightGlowTexture() {
+    const w = 128, h = 512;
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const cx = c.getContext('2d');
+    cx.fillStyle = 'rgba(255,243,196,0.16)';
+    cx.filter = 'blur(14px)';
+    cx.fillRect(14, 14, w - 28, h - 28);
+    return new THREE.CanvasTexture(c);
+  }
+  const floodlightGlow = new THREE.Mesh(
+    new THREE.PlaneGeometry(BOARD.widthBottom + 6, BOARD.length + 10),
+    new THREE.MeshBasicMaterial({ map: makeFloodlightGlowTexture(), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })
+  );
+  floodlightGlow.rotation.x = -Math.PI / 2;
+  floodlightGlow.position.set(0, 0.05, -BOARD.length / 2);
+  floodlightGlow.visible = false;
+  scene.add(floodlightGlow);
 
   // ---- cafeterias (fase 5, 2026-09-06; convertidas en INVERSION en fase 9, 2026-09-07 -
   // pedido por el usuario: "deberian ser una inversion que reporten dinero... y tengan gastos
@@ -3711,7 +3763,11 @@
   // buyCafeteria) y generan/gastan monedas cada partida (ver computeCafeteriaFinance, espejo
   // de award_match_coins en supabase-stadium-cafeteria.sql). Colores propios por material
   // (basica/premium) para que se note el nivel a simple vista.
-  const CAFETERIA_OUTER_X = FLOODLIGHT_OUTER_X - 4; // un poco mas cerca que las torres, no pegado
+  // 2026-09-13 (feedback del usuario: "las cafeterias mas separadas del estadio"): antes
+  // quedaban casi pegadas al muro de la grada (FLOODLIGHT_OUTER_X - 4, mas cerca incluso que
+  // las torres de luz) - ahora se alejan bastante mas, a la altura del parking, para que se
+  // note un hueco de cesped real entre la grada y la cafeteria.
+  const CAFETERIA_OUTER_X = FLOODLIGHT_OUTER_X + 34;
   const CAFETERIA_COLORS = {
     1: { body: 0xd8442e, roof: 0xf3e2c0 }, // basica: kiosco rojo/crema de siempre
     2: { body: 0x1f2a44, roof: 0xc98a2e }, // premium: azul oscuro + dorado, mas "restaurante"
@@ -3793,25 +3849,60 @@
     ad.position.set(0, 4.6, 4.51);
     g.add(ad);
 
-    // terraza: mesa + 4 sillas + 2 personas sentadas, delante del kiosco
+    // terraza (2026-09-13, "que se vean terrazas en las cafeterias"): tarima de madera bajo
+    // las mesas para que se lea como una zona propia, no solo mobiliario suelto en el
+    // cesped, mas 2 mesas (antes solo 1) con sillas y gente sentada.
+    const deckMat = new THREE.MeshStandardMaterial({ color: 0xa9764a, roughness: 0.85 });
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(10, 0.18, 7.5), deckMat);
+    deck.position.set(0, 0.09, 8);
+    deck.receiveShadow = true;
+    g.add(deck);
+
     const furnitureMat = new THREE.MeshStandardMaterial({ color: 0xf3e2c0, roughness: 0.7 });
-    const tableTop = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, 0.15, 10), furnitureMat);
-    tableTop.position.set(0, 1.1, 8);
-    tableTop.castShadow = true;
-    g.add(tableTop);
-    const tableLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.1, 6), furnitureMat);
-    tableLeg.position.set(0, 0.55, 8);
-    g.add(tableLeg);
-    [[-1.7, 7], [1.7, 7], [-1.7, 9], [1.7, 9]].forEach(([cx2, cz2]) => {
-      const seat = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.15, 0.7), furnitureMat);
-      seat.position.set(cx2, 0.7, cz2);
-      g.add(seat);
-      const back = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.1), furnitureMat);
-      back.position.set(cx2, 1.1, cz2 + (cz2 < 8 ? -0.3 : 0.3));
-      g.add(back);
+    function buildTerraceTable(tx, tz, addPeople) {
+      const tableTop = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, 0.15, 10), furnitureMat);
+      tableTop.position.set(tx, 1.1, tz);
+      tableTop.castShadow = true;
+      g.add(tableTop);
+      const tableLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.1, 6), furnitureMat);
+      tableLeg.position.set(tx, 0.55, tz);
+      g.add(tableLeg);
+      [[-1.7, -1], [1.7, -1], [-1.7, 1], [1.7, 1]].forEach(([dx, dz]) => {
+        const cx2 = tx + dx, cz2 = tz + dz;
+        const seat = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.15, 0.7), furnitureMat);
+        seat.position.set(cx2, 0.7, cz2);
+        g.add(seat);
+        const back = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.1), furnitureMat);
+        back.position.set(cx2, 1.1, cz2 + (dz < 0 ? -0.3 : 0.3));
+        g.add(back);
+      });
+      if (addPeople) {
+        g.add(buildSeatedPerson(tx - 1.7, tz - 1, Math.PI * 0.15));
+        g.add(buildSeatedPerson(tx + 1.7, tz + 1, Math.PI * 1.1));
+      }
+    }
+    buildTerraceTable(-2.4, 8, true);
+    buildTerraceTable(2.6, 7.3, false);
+
+    // sombrilla con publicidad (2026-09-13, "alguna sombrilla con publicidad, que igual mas
+    // adelante personalizamos") - misma marca inventada que el cartel de la pared, de
+    // momento; el toldo lleva una franja con el logo, facil de sustituir mas adelante por
+    // publicidad real/personalizada sin tocar la geometria.
+    const umbrellaPoleMat = new THREE.MeshStandardMaterial({ color: 0x8a8a82, roughness: 0.5, metalness: 0.4 });
+    const umbrellaPole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 2.6, 6), umbrellaPoleMat);
+    umbrellaPole.position.set(-2.4, 2.4, 8);
+    g.add(umbrellaPole);
+    const canopyMat = new THREE.MeshStandardMaterial({ color: brand.bg, roughness: 0.7, side: THREE.DoubleSide });
+    const canopy = new THREE.Mesh(new THREE.ConeGeometry(2.4, 0.85, 8), canopyMat);
+    canopy.position.set(-2.4, 3.6, 8);
+    g.add(canopy);
+    const valanceMat = new THREE.MeshBasicMaterial({ map: makeCafeteriaAdTexture(brand), side: THREE.DoubleSide });
+    [0, Math.PI / 2, Math.PI, -Math.PI / 2].forEach(a => {
+      const valance = new THREE.Mesh(new THREE.PlaneGeometry(2, 0.55), valanceMat);
+      valance.position.set(-2.4 + Math.sin(a) * 1.6, 3.05, 8 + Math.cos(a) * 1.6);
+      valance.rotation.y = a;
+      g.add(valance);
     });
-    g.add(buildSeatedPerson(-1.7, 7, Math.PI * 0.15));
-    g.add(buildSeatedPerson(1.7, 9, Math.PI * 1.1));
 
     g.position.set(px, 0, pz);
     g.rotation.y = rotY;
@@ -3944,21 +4035,39 @@
   // hormigon claro, ladrillo, vidrio oscuro) generadas una sola vez y reutilizadas (clonando
   // solo la textura, no regenerando el canvas) en cada edificio con su propio repeat para que
   // el tamaño de ventana no se deforme al escalar la caja. ----
+  // 2026-09-13 (feedback del usuario: "que tengan mas textura"): resolucion del canvas al
+  // doble (64->128) y varias capas de detalle que antes no tenia - variacion de brillo por
+  // ventana (no todas identicas), un grano fino en la fachada (igual de tecnica que el
+  // cesped, makeGrassTexture) y una sombra sutil bajo cada ventana para dar algo de relieve
+  // sin necesidad de geometria real (normal maps no encajan bien con MeshStandardMaterial
+  // sin mas trabajo, esto es la aproximacion barata dentro de las reglas del proyecto: todo
+  // generado en canvas, sin imagenes descargadas).
   function makeFacadeTexture(baseRGB, windowRGBA, isGlass) {
-    const s = 64;
+    const s = 128;
     const c = document.createElement('canvas'); c.width = s; c.height = s;
     const cx = c.getContext('2d');
     cx.fillStyle = baseRGB;
     cx.fillRect(0, 0, s, s);
-    cx.fillStyle = windowRGBA;
+    // grano fino en toda la fachada (rompe el color plano)
+    for (let i = 0; i < 500; i++) {
+      cx.fillStyle = Math.random() < 0.5 ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.05)';
+      cx.fillRect(Math.random() * s, Math.random() * s, 1.5, 1.5);
+    }
     // rejilla de ventanas 4x6, con marco (separacion) entre cada una - una sola celda de tile,
     // se repite via texture.repeat segun el tamaño real del edificio
-    const cols = 4, rows = 6, pad = isGlass ? 1 : 2;
+    const cols = 4, rows = 6, pad = isGlass ? 2 : 4;
     const cw = s / cols, rh = s / rows;
     for (let cxi = 0; cxi < cols; cxi++) {
       for (let ryi = 0; ryi < rows; ryi++) {
         if (!isGlass && Math.random() < 0.3) continue; // ladrillo/hormigon: alguna ventana "apagada" (hueco solido)
-        cx.fillRect(cxi * cw + pad, ryi * rh + pad, cw - pad * 2, rh - pad * 2);
+        const wx = cxi * cw + pad, wy = ryi * rh + pad, ww = cw - pad * 2, wh = rh - pad * 2;
+        // sombra sutil bajo el marco de la ventana, antes de pintar el cristal/hueco encima
+        cx.fillStyle = 'rgba(0,0,0,0.12)';
+        cx.fillRect(wx - 0.5, wy + wh - 1, ww + 1, 2.5);
+        // variacion de brillo por ventana (no todas exactamente iguales)
+        const shade = 0.85 + Math.random() * 0.3;
+        cx.fillStyle = windowRGBA.replace(/[\d.]+\)$/, m => (+m.slice(0, -1) * shade).toFixed(2) + ')');
+        cx.fillRect(wx, wy, ww, wh);
       }
     }
     const tex = new THREE.CanvasTexture(c);
@@ -4278,16 +4387,46 @@
     g.rotation.y = rotY;
     return g;
   }
-  for (let i = 0; i < 6; i++) {
+  // 2026-09-13 (feedback del usuario: "gente paseando en movimiento") - cada paseante camina
+  // hacia adelante y hacia atras a lo largo de su direccion inicial (oscilacion suave con
+  // seno, ver updateDogWalkers) en vez de quedarse siempre quieto en el mismo sitio.
+  // 2026-09-13 (otra vuelta, "quiero que haya muchos mas paseantes, que se vean tambien desde
+  // el plano del juego en si, no solo en la animacion"): subido de 6 a 30, y el reparto ya no
+  // es un circulo completo alrededor del estadio (la mitad caian en Z positiva, literalmente
+  // DETRAS de la camara de juego normal - restCamPos esta en z~40-70 mirando hacia -Z, mismo
+  // problema ya visto con el parking/las torretas) - ahora Z nunca pasa de 20 (delante de la
+  // camara o muy cerca de ella), asi que caen dentro de lo que la camara de juego SI abarca.
+  const dogWalkers = [];
+  for (let i = 0; i < 30; i++) {
     let x, z, attempts = 0;
     do {
-      const angle = Math.random() * Math.PI * 2;
-      const radius = 170 + Math.random() * 220;
-      x = Math.sin(angle) * radius;
-      z = -Math.cos(angle) * radius + 40;
+      x = (Math.random() * 2 - 1) * 400;
+      z = 20 - Math.random() * 400;
       attempts++;
     } while ((insideStadiumFootprint(x, z) || insideParkingFootprint(x, z)) && attempts < 20);
-    scene.add(buildDogWalker(x, z, Math.random() * Math.PI * 2));
+    const rotY = Math.random() * Math.PI * 2;
+    const walker = buildDogWalker(x, z, rotY);
+    scene.add(walker);
+    dogWalkers.push({
+      group: walker, baseX: x, baseZ: z,
+      dirX: Math.sin(rotY), dirZ: Math.cos(rotY),
+      range: 10 + Math.random() * 10,
+      speed: 0.35 + Math.random() * 0.25,
+      t: Math.random() * 10,
+    });
+  }
+  // paseo de ida y vuelta: la posicion sigue un seno a lo largo de la direccion inicial (no
+  // hace falta detectar "llegue al final, doy la vuelta" - el propio seno ya frena y revierte
+  // suavemente en los extremos) y la orientacion se gira 180 grados cuando el paseante esta
+  // volviendo (derivada del seno, el coseno, negativa)
+  function updateDogWalkers(dt) {
+    dogWalkers.forEach(w => {
+      w.t += dt * w.speed;
+      const offset = Math.sin(w.t) * w.range;
+      w.group.position.set(w.baseX + w.dirX * offset, 0, w.baseZ + w.dirZ * offset);
+      const goingBack = Math.cos(w.t) < 0;
+      w.group.rotation.y = goingBack ? Math.atan2(-w.dirX, -w.dirZ) : Math.atan2(w.dirX, w.dirZ);
+    });
   }
 
 
@@ -4697,6 +4836,7 @@
     // material ni de la ocupacion, solo de cuanto se ha construido
     const floodlightsUnlocked = (seatsBuilt || 0) >= STADIUM_TOTAL_SEATS;
     floodlightGroups.forEach(g => { g.visible = floodlightsUnlocked; });
+    floodlightGlow.visible = floodlightsUnlocked;
     // cafeterias compradas (fase 9, 2026-09-07): ya no se desbloquean solas con los asientos,
     // ver renderStadiumPhases/buyCafeteria - el color cambia segun el nivel comprado
     const tier = cafeteriaTier || 0;
@@ -4712,9 +4852,17 @@
     // visible por cada pack comprado, igual que las gradas se ven crecer con cada pack de
     // asientos. parkingSpotsBuilt viene de la columna parking_spots_built (ver
     // supabase-stadium-parking.sql).
+    // 2026-09-13 (feedback del usuario: "el parking si el estadio esta lleno que se vea
+    // lleno de coches, que sea proporcional a la asistencia al estadio"): antes se veian
+    // SIEMPRE todos los coches de las plazas ya compradas, sin importar la ocupacion real de
+    // esa partida - un dia de poca afluencia se veia el parking igual de lleno que un dia
+    // con el estadio a reventar, lo cual no tenia sentido. Ahora el numero de coches
+    // visibles es el numero de plazas compradas multiplicado por la ocupacion real de esta
+    // partida (occupancyFraction) - mismo espiritu que la gente en las gradas.
     const spotsBuilt = parkingSpotsBuilt || 0;
+    const spotsOccupied = Math.max(0, Math.min(spotsBuilt, Math.round(spotsBuilt * (occupancyFraction || 0))));
     parkingGroups.forEach(g => { g.visible = spotsBuilt > 0; });
-    parkingCarGroups.forEach((g, i) => { g.visible = i < spotsBuilt; });
+    parkingCarGroups.forEach((g, i) => { g.visible = i < spotsOccupied; });
     // gruas (fase 6, 2026-09-06): visibles SOLO durante la partida siguiente a haber comprado
     // un pack de construccion/reforma (ver activeMatchConstructionZone, consumido en
     // startOnlineSoloMatch) - colocadas junto a la zona exacta que se esta ampliando/reformando.
@@ -5803,6 +5951,7 @@
     updateConfetti(dt);
     updateCrowdCelebration(dt);
     updateCraneSpin(dt);
+    updateDogWalkers(dt);
 
     renderer.render(scene, camera);
     requestAnimationFrame(frame);
