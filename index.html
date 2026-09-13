@@ -3605,61 +3605,93 @@
   }
 
   // ---- torres de iluminacion (fase 5, 2026-09-06): decoracion pura, "premio" visual al
-  // completar el aforo entero (500) - una en cada esquina, encima de las gradas. Focos con
-  // material emisivo (brillan solo, sin luces dinamicas de THREE.js reales) para no tocar
-  // el rendimiento en moviles de gama baja (ver comentario del Samsung A70 en stepPuck).
-  // 2026-09-13 (feedback del usuario: "las torretas de luz estan fatal ahi puestas porque
-  // estan fuera del estadio, deberian estar encima de las tribunas, con un palo mas corto"):
-  // antes estaban plantadas en el suelo, MAS ALLA del borde exterior de las gradas
-  // (FLOODLIGHT_OUTER_X, que sigue existiendo y usandose para colocar cafeterias/parking/
-  // gruas fuera del estadio) - parecian postes sueltos en el cesped.
-  // 2026-09-13 (segunda vuelta, el usuario dibujo encima de una captura marcando con una X
-  // las torretas que seguian mal): el primer intento las apoyaba en FLOODLIGHT_STAND_TOP_X
-  // con una Z de esquina calculada con una formula distinta (aproximada, de antes de que
-  // existiera el nivel 2) - el X de la lateral y la Z del fondo no coincidian con el vertice
-  // real de la pieza diagonal de esquina (upperCornerMeshes), asi que la torreta quedaba
-  // varios metros mas alla del tejado real, "flotando" en el cesped de fondo. Ahora se usan
-  // EXACTAMENTE las mismas formulas que calculan ese vertice (ver upperCornerMeshes en
-  // updateStadiumVisual: latX/fondoZ de la fila mas alta) para las 2 esquinas del fondo, y
-  // el mismo X de esquina con la Z del borde delantero para las 2 esquinas de este lado - se
-  // añade ademas una pequeña plataforma bajo el palo para que se lea claramente como "de pie
-  // sobre el tejado", no flotando.
+  // completar el aforo entero (500) - una en cada esquina. Focos con material emisivo
+  // (brillan solo, sin luces dinamicas de THREE.js reales) para no tocar el rendimiento en
+  // moviles de gama baja (ver comentario del Samsung A70 en stepPuck).
+  // 2026-09-13 (TERCERA vuelta - el usuario mando una foto real de un estadio de referencia:
+  // "parece que estan volando... tienen que estar donde la grada, aunque no tengan columna
+  // me da igual que sea modernas, y las luces orientadas al campo"): los dos intentos
+  // anteriores montaban el palo A MEDIA ALTURA (arrancando en el techo de la grada, y encima
+  // ni siquiera coincidiendo con masa solida real: el "borde delantero" quedaba 6 unidades
+  // mas alla del frente real de la grada, y el "vertice del fondo" caia en el filo de una
+  // pieza diagonal muy fina) - sin nada visible debajo conectandolo al suelo, quedaba
+  // literalmente flotando en el aire. La foto de referencia deja claro como es de verdad: un
+  // palo que nace EN EL SUELO, dentro de la masa de la grada (se ve por detras/al lado de las
+  // gradas, no encima flotando), inclinado hacia el campo, con el foco en lo alto apuntando
+  // hacia abajo y hacia el terreno de juego.
+  // Ahora: el palo arranca en y=0 (suelo) y se solapa 2 unidades HACIA DENTRO del borde solido
+  // real de la grada (nunca mas alla, para no dejar hueco) - FLOODLIGHT_EDGE_X es el borde
+  // exterior real del nivel 2 (sin el "+8" de margen que lo sacaba fuera), y las Z delantera/
+  // trasera son las de la masa solida real de la lateral (0 y -BOARD.length al maximo), no
+  // approximaciones. El palo entero se inclina unos grados hacia el centro del campo
+  // (mastGroup.rotation.z) y el foco en lo alto se inclina ademas hacia abajo, para que quede
+  // claro que ilumina el terreno de juego y no el cielo.
+  // FLOODLIGHT_OUTER_X: fuera de la grada (+8), se sigue usando para colocar decoracion en
+  // el cesped exterior (cafeterias, parking, gruas) - no confundir con FLOODLIGHT_EDGE_X
+  // (el borde SOLIDO real, usado solo para plantar las torretas dentro de la masa de la grada)
   const FLOODLIGHT_OUTER_X = bottomHalf + STAND_MARGIN + 2 * STAND_ROWS * STAND_ROW_DEPTH + 8;
-  const FLOODLIGHT_CORNER_X = bottomHalf + STAND_MARGIN + (UPPER_ROW_OFFSET + STAND_ROWS - 1 + 0.5) * STAND_ROW_DEPTH;
-  const FLOODLIGHT_CORNER_FONDO_Z = -(BOARD.length + BOARD.gateDepth + FONDO_MARGIN + (UPPER_ROW_OFFSET + STAND_ROWS - 1 + 0.5) * STAND_ROW_DEPTH);
-  const FLOODLIGHT_STAND_TOP_Y = UPPER_ROW_HEIGHTS[STAND_ROWS - 1];
+  const FLOODLIGHT_EDGE_X = bottomHalf + STAND_MARGIN + 2 * STAND_ROWS * STAND_ROW_DEPTH - 2;
+  const FLOODLIGHT_FRONT_Z = -2;
+  const FLOODLIGHT_BACK_Z = -(BOARD.length - 2);
   const FLOODLIGHT_POSITIONS = [
-    [FLOODLIGHT_CORNER_X, 6], [-FLOODLIGHT_CORNER_X, 6],
-    [FLOODLIGHT_CORNER_X, FLOODLIGHT_CORNER_FONDO_Z], [-FLOODLIGHT_CORNER_X, FLOODLIGHT_CORNER_FONDO_Z],
+    [FLOODLIGHT_EDGE_X, FLOODLIGHT_FRONT_Z], [-FLOODLIGHT_EDGE_X, FLOODLIGHT_FRONT_Z],
+    [FLOODLIGHT_EDGE_X, FLOODLIGHT_BACK_Z], [-FLOODLIGHT_EDGE_X, FLOODLIGHT_BACK_Z],
   ];
   const floodlightGroups = [];
-  const FLOODLIGHT_POLE_HEIGHT = 18; // antes 42 - ya no arranca desde el suelo, no le hace falta ser tan largo
+  const FLOODLIGHT_POLE_HEIGHT = 48; // desde el suelo - bien por encima de la grada (top ~32), como una torre de verdad
+  const FLOODLIGHT_LEAN = 0.16; // radianes (~9 grados) - inclinacion hacia el centro del campo
   FLOODLIGHT_POSITIONS.forEach(([px, pz]) => {
     const g = new THREE.Group();
-    const platMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.8 });
-    const platform = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.6, 3.5), platMat);
-    platform.position.y = 0.3;
-    platform.castShadow = platform.receiveShadow = true;
-    g.add(platform);
-    const poleMat = new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 0.6, metalness: 0.4 });
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.1, FLOODLIGHT_POLE_HEIGHT, 8), poleMat);
-    pole.position.y = 0.6 + FLOODLIGHT_POLE_HEIGHT / 2;
+    // zapata de hormigon en el suelo - nunca se inclina, ancla visualmente el palo al suelo
+    const footingMat = new THREE.MeshStandardMaterial({ color: 0x555550, roughness: 0.9 });
+    const footing = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 2.2, 1, 8), footingMat);
+    footing.position.y = 0.5;
+    footing.castShadow = footing.receiveShadow = true;
+    g.add(footing);
+
+    // el mastil (palo + foco) pivota en el suelo y se inclina como un bloque hacia el centro
+    // del campo (X=0) - asi el conjunto entero "cae" sobre el terreno de juego, como en una
+    // torre real, en vez de quedar recto como una farola de calle
+    const mastGroup = new THREE.Group();
+    mastGroup.rotation.z = (px > 0 ? 1 : -1) * FLOODLIGHT_LEAN;
+    g.add(mastGroup);
+
+    const poleMat = new THREE.MeshStandardMaterial({ color: 0x8a8a82, roughness: 0.55, metalness: 0.5 });
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 1.3, FLOODLIGHT_POLE_HEIGHT, 8), poleMat);
+    pole.position.y = FLOODLIGHT_POLE_HEIGHT / 2;
     pole.castShadow = true;
-    g.add(pole);
-    const headMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.7 });
-    const head = new THREE.Mesh(new THREE.BoxGeometry(7, 4, 3), headMat);
-    head.position.y = 0.6 + FLOODLIGHT_POLE_HEIGHT + 2;
-    g.add(head);
+    mastGroup.add(pole);
+    // un par de riostras diagonales cruzadas (insinuan celosia metalica sin modelar una
+    // estructura completa - "aunque no tengan columna, me da igual que sea modernas")
+    const braceMat = new THREE.MeshStandardMaterial({ color: 0x6a6a62, roughness: 0.6, metalness: 0.4 });
+    [-1, 1].forEach(bs => {
+      const brace = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, FLOODLIGHT_POLE_HEIGHT * 0.55, 5), braceMat);
+      brace.position.set(bs * 0.9, FLOODLIGHT_POLE_HEIGHT * 0.27, 0);
+      brace.rotation.z = bs * 0.35;
+      mastGroup.add(brace);
+    });
+
+    // cabeza del foco: se inclina ADEMAS hacia abajo (pitch) para que el panel de bombillas
+    // quede claramente orientado al terreno de juego, no al cielo
+    const headGroup = new THREE.Group();
+    headGroup.position.y = FLOODLIGHT_POLE_HEIGHT;
+    headGroup.rotation.x = -0.55; // ~31 grados hacia abajo
+    mastGroup.add(headGroup);
+    const headMat = new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 0.7 });
+    const head = new THREE.Mesh(new THREE.BoxGeometry(9, 5.5, 1.4), headMat);
+    head.position.z = 1.2;
+    headGroup.add(head);
     const bulbMat = new THREE.MeshStandardMaterial({ color: 0xfff3c4, emissive: 0xfff3c4, emissiveIntensity: 1.4 });
-    const bulbGeo = new THREE.PlaneGeometry(1.1, 1.1);
-    for (let bx = -2; bx <= 2; bx++) {
-      for (let by = -1; by <= 1; by++) {
+    const bulbGeo = new THREE.PlaneGeometry(1.3, 1.3);
+    for (let bx = -3; bx <= 3; bx++) {
+      for (let by = -2; by <= 2; by++) {
         const bulb = new THREE.Mesh(bulbGeo, bulbMat);
-        bulb.position.set(bx * 1.3, 0.6 + FLOODLIGHT_POLE_HEIGHT + 2 + by * 1.3, 1.6);
-        g.add(bulb);
+        bulb.position.set(bx * 1.15, by * 1.05, 1.95);
+        headGroup.add(bulb);
       }
     }
-    g.position.set(px, FLOODLIGHT_STAND_TOP_Y, pz);
+
+    g.position.set(px, 0, pz);
     g.visible = false;
     scene.add(g);
     floodlightGroups.push(g);
