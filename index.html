@@ -1452,14 +1452,22 @@
   }
 
   // fase 6 (2026-09-06): grua "de obra" solo en la SIGUIENTE partida tras comprar un pack de
-  // construccion o reforma, colocada justo en la zona que se esta ampliando/reformando, y sin
-  // publico ahi esa partida (no puede haber espectadores sentados en una zona en obras). Antes
+  // construccion o reforma, colocada justo en la zona que se esta ampliando/reformando. Antes
   // las gruas se quedaban puestas de forma permanente hasta terminar el estadio ENTERO (podian
   // ser meses) - mucho mas realista que sea solo la partida siguiente a cada compra concreta.
   // pendingConstructionZone se guarda en localStorage (sobrevive a un cierre/recarga de la
   // app); activeMatchConstructionZone es la que de verdad usa la escena 3D, y solo se rellena
   // al EMPEZAR una partida online (ver startOnlineSoloMatch) - consumiendo y limpiando la
   // pendiente, asi que solo dura esa unica partida.
+  // 2026-09-13 (bug reportado por el usuario: "en las gradas laterales cuando hay obras
+  // aunque ponga 42 espectadores no se pinta ningun espectador en ellas"): al principio,
+  // ademas de la grua, esa zona se quedaba SIN NINGUN espectador dibujado durante toda la
+  // partida (ver updateStadiumVisual, los "if (zone === '...') return" que habia en cada
+  // grada). La cifra de asistencia del HUD/finanzas es la del estadio ENTERO y no distingue
+  // zonas, asi que el jugador veia "42 espectadores" en el marcador mientras la grada en obras
+  // se quedaba vacia de golpe - un mensaje visual que no cuadraba con el numero real. Ahora la
+  // grua sigue apareciendo (avisa de que esa zona se esta ampliando), pero el publico se
+  // reparte con normalidad por todas las gradas, coincida o no con la zona en obras.
   let activeMatchConstructionZone = null;
   const CONSTRUCTION_ZONE_STORAGE_KEY = 'puckslide_construction_zone';
   function setPendingConstructionZone(zone) {
@@ -4644,8 +4652,6 @@
     }
 
     [-1, 1].forEach(sign => {
-      // sin publico mientras esta zona esta "en obras" esta partida (ver activeMatchConstructionZone)
-      if (zone === 'lateral') return;
       if (standLength <= 0) return;
       const cols = Math.max(1, Math.floor(standLength / PERSON_SPACING_Z));
       const colSpacing = standLength / cols;
@@ -4681,7 +4687,7 @@
     // para las 4 - si no, la gente de las filas altas (aun sin construir) aparecia flotando
     // por encima de la porteria, sobre una fila que ni siquiera existe todavia (bug real
     // reportado por el usuario el 2026-09-06).
-    for (let row = 0; row < STAND_ROWS && zone !== 'fondo'; row++) {
+    for (let row = 0; row < STAND_ROWS; row++) {
       const rowWidth = BOARD.widthTop * fondoRowFraction(fondoSeats, FONDO_MAX_SEATS, row, STAND_ROWS);
       if (rowWidth <= 0.5) continue;
       const rowHeight = STAND_ROW_HEIGHTS[row];
@@ -4705,7 +4711,6 @@
     // nivel 2 (fase 3, 2026-09-06): mismo patron que el nivel 1, con UPPER_ROW_HEIGHTS y las
     // filas de upperStandRowMeshes/upperFondoRowMeshes en vez de las del nivel 1
     [-1, 1].forEach(sign => {
-      if (zone === 'upperLateral') return;
       if (upperStandLength <= 0) return;
       const cols = Math.max(1, Math.floor(upperStandLength / PERSON_SPACING_Z));
       const colSpacing = upperStandLength / cols;
@@ -4731,7 +4736,7 @@
       }
     });
     // mismo arreglo que en la grada del fondo del nivel 1: cada fila tiene su propio ancho
-    for (let row = 0; row < STAND_ROWS && zone !== 'upperFondo'; row++) {
+    for (let row = 0; row < STAND_ROWS; row++) {
       const rowWidth = BOARD.widthTop * fondoRowFraction(upperFondoSeats, UPPER_FONDO_MAX_SEATS, row, STAND_ROWS);
       if (rowWidth <= 0.5) continue;
       const rowHeight = UPPER_ROW_HEIGHTS[row];
@@ -4793,7 +4798,6 @@
       bannerMesh.visible = false;
     }
   }
-
   // aforo real (0-1) de un jugador segun su posicion en su division de liga esta semana +
   // bono de fin de semana - compartido entre la mesa 3D, la vista previa de "Mi Estadio" y
   // el perfil de otros jugadores desde la clasificacion
