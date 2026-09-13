@@ -3612,38 +3612,50 @@
   // estan fuera del estadio, deberian estar encima de las tribunas, con un palo mas corto"):
   // antes estaban plantadas en el suelo, MAS ALLA del borde exterior de las gradas
   // (FLOODLIGHT_OUTER_X, que sigue existiendo y usandose para colocar cafeterias/parking/
-  // gruas fuera del estadio) - parecian postes sueltos en el cesped. Ahora se apoyan en el
-  // borde trasero de la fila mas alta del nivel 2 (FLOODLIGHT_STAND_TOP_X, el borde de la
-  // grada en si, sin salirse de ella) y arrancan desde la altura del techo de esa grada
-  // (FLOODLIGHT_STAND_TOP_Y) en vez de desde el suelo - el palo visible se acorta a juego
-  // (ya no necesita cubrir esos 32 de grada por debajo).
+  // gruas fuera del estadio) - parecian postes sueltos en el cesped.
+  // 2026-09-13 (segunda vuelta, el usuario dibujo encima de una captura marcando con una X
+  // las torretas que seguian mal): el primer intento las apoyaba en FLOODLIGHT_STAND_TOP_X
+  // con una Z de esquina calculada con una formula distinta (aproximada, de antes de que
+  // existiera el nivel 2) - el X de la lateral y la Z del fondo no coincidian con el vertice
+  // real de la pieza diagonal de esquina (upperCornerMeshes), asi que la torreta quedaba
+  // varios metros mas alla del tejado real, "flotando" en el cesped de fondo. Ahora se usan
+  // EXACTAMENTE las mismas formulas que calculan ese vertice (ver upperCornerMeshes en
+  // updateStadiumVisual: latX/fondoZ de la fila mas alta) para las 2 esquinas del fondo, y
+  // el mismo X de esquina con la Z del borde delantero para las 2 esquinas de este lado - se
+  // añade ademas una pequeña plataforma bajo el palo para que se lea claramente como "de pie
+  // sobre el tejado", no flotando.
   const FLOODLIGHT_OUTER_X = bottomHalf + STAND_MARGIN + 2 * STAND_ROWS * STAND_ROW_DEPTH + 8;
-  const FLOODLIGHT_STAND_TOP_X = bottomHalf + STAND_MARGIN + 2 * STAND_ROWS * STAND_ROW_DEPTH;
+  const FLOODLIGHT_CORNER_X = bottomHalf + STAND_MARGIN + (UPPER_ROW_OFFSET + STAND_ROWS - 1 + 0.5) * STAND_ROW_DEPTH;
+  const FLOODLIGHT_CORNER_FONDO_Z = -(BOARD.length + BOARD.gateDepth + FONDO_MARGIN + (UPPER_ROW_OFFSET + STAND_ROWS - 1 + 0.5) * STAND_ROW_DEPTH);
   const FLOODLIGHT_STAND_TOP_Y = UPPER_ROW_HEIGHTS[STAND_ROWS - 1];
   const FLOODLIGHT_POSITIONS = [
-    [FLOODLIGHT_STAND_TOP_X, 6], [-FLOODLIGHT_STAND_TOP_X, 6],
-    [FLOODLIGHT_STAND_TOP_X, -(BOARD.length + BOARD.gateDepth + FONDO_MARGIN + UPPER_ROW_OFFSET * STAND_ROW_DEPTH * 2 + 6)],
-    [-FLOODLIGHT_STAND_TOP_X, -(BOARD.length + BOARD.gateDepth + FONDO_MARGIN + UPPER_ROW_OFFSET * STAND_ROW_DEPTH * 2 + 6)],
+    [FLOODLIGHT_CORNER_X, 6], [-FLOODLIGHT_CORNER_X, 6],
+    [FLOODLIGHT_CORNER_X, FLOODLIGHT_CORNER_FONDO_Z], [-FLOODLIGHT_CORNER_X, FLOODLIGHT_CORNER_FONDO_Z],
   ];
   const floodlightGroups = [];
   const FLOODLIGHT_POLE_HEIGHT = 18; // antes 42 - ya no arranca desde el suelo, no le hace falta ser tan largo
   FLOODLIGHT_POSITIONS.forEach(([px, pz]) => {
     const g = new THREE.Group();
+    const platMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.8 });
+    const platform = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.6, 3.5), platMat);
+    platform.position.y = 0.3;
+    platform.castShadow = platform.receiveShadow = true;
+    g.add(platform);
     const poleMat = new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 0.6, metalness: 0.4 });
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.1, FLOODLIGHT_POLE_HEIGHT, 8), poleMat);
-    pole.position.y = FLOODLIGHT_POLE_HEIGHT / 2;
+    pole.position.y = 0.6 + FLOODLIGHT_POLE_HEIGHT / 2;
     pole.castShadow = true;
     g.add(pole);
     const headMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.7 });
     const head = new THREE.Mesh(new THREE.BoxGeometry(7, 4, 3), headMat);
-    head.position.y = FLOODLIGHT_POLE_HEIGHT + 2;
+    head.position.y = 0.6 + FLOODLIGHT_POLE_HEIGHT + 2;
     g.add(head);
     const bulbMat = new THREE.MeshStandardMaterial({ color: 0xfff3c4, emissive: 0xfff3c4, emissiveIntensity: 1.4 });
     const bulbGeo = new THREE.PlaneGeometry(1.1, 1.1);
     for (let bx = -2; bx <= 2; bx++) {
       for (let by = -1; by <= 1; by++) {
         const bulb = new THREE.Mesh(bulbGeo, bulbMat);
-        bulb.position.set(bx * 1.3, FLOODLIGHT_POLE_HEIGHT + 2 + by * 1.3, 1.6);
+        bulb.position.set(bx * 1.3, 0.6 + FLOODLIGHT_POLE_HEIGHT + 2 + by * 1.3, 1.6);
         g.add(bulb);
       }
     }
@@ -3666,24 +3678,103 @@
     1: { body: 0xd8442e, roof: 0xf3e2c0 }, // basica: kiosco rojo/crema de siempre
     2: { body: 0x1f2a44, roof: 0xc98a2e }, // premium: azul oscuro + dorado, mas "restaurante"
   };
+  // 2026-09-13 (feedback del usuario sobre una foto que se le mando: "las cafeterias mas
+  // grandes y que contengan publicidad aunque sea inventada y que se noten sillas y personas
+  // tomando algo") - carteles de marcas inventadas (nunca marcas reales) dibujados en canvas,
+  // reutilizando la misma tecnica que el resto de texturas del juego (bandera, cesped...).
+  const CAFETERIA_AD_BRANDS = [
+    { text: 'PUCK COLA', bg: '#c0392b', fg: '#ffffff' },
+    { text: 'GOLDEN GOAL', bg: '#1f6f43', fg: '#ffe8a3' },
+    { text: 'SNACK PRO', bg: '#e8a83a', fg: '#2b1a0a' },
+    { text: 'ARENA BREW', bg: '#2c3e78', fg: '#f3e2c0' },
+    { text: 'RAPID FUEL', bg: '#8a1f4a', fg: '#ffffff' },
+  ];
+  function makeCafeteriaAdTexture(brand) {
+    const w = 256, h = 96;
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const cx = c.getContext('2d');
+    cx.fillStyle = brand.bg;
+    cx.fillRect(0, 0, w, h);
+    cx.strokeStyle = brand.fg;
+    cx.lineWidth = 4;
+    cx.strokeRect(6, 6, w - 12, h - 12);
+    cx.fillStyle = brand.fg;
+    cx.font = 'bold 34px sans-serif';
+    cx.textAlign = 'center';
+    cx.textBaseline = 'middle';
+    cx.fillText(brand.text, w / 2, h / 2);
+    return new THREE.CanvasTexture(c);
+  }
+  // gente sentada en la terraza: version simplificada (sin instancing, solo unas pocas figuras
+  // por cafeteria) reutilizando los mismos colores de piel/ropa que la grada
+  // colores propios (no CLOTHES_COLORS/SKIN_COLORS - esas se declaran mas abajo, junto al
+  // resto del sistema de publico, y buildCafeteria se llama antes de llegar ahi)
+  const SEATED_CLOTHES_COLORS = [0xd8442e, 0xe8b23a, 0x3b7dc9, 0x4f9e5c, 0xf3e2c0, 0x8a5c34, 0xffffff, 0x7a3ba0];
+  const SEATED_SKIN_COLORS = [0xf0c8a0, 0xd8a878, 0xb87d4e, 0x8a5a34, 0x5c3a20];
+  function buildSeatedPerson(x, z, rotY) {
+    const g = new THREE.Group();
+    const clothes = SEATED_CLOTHES_COLORS[(Math.random() * SEATED_CLOTHES_COLORS.length) | 0];
+    const skin = SEATED_SKIN_COLORS[(Math.random() * SEATED_SKIN_COLORS.length) | 0];
+    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.42, 0.7, 2, 6), new THREE.MeshStandardMaterial({ color: clothes, roughness: 0.85 }));
+    torso.position.y = 1.15;
+    torso.castShadow = true;
+    g.add(torso);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 6), new THREE.MeshStandardMaterial({ color: skin, roughness: 0.85 }));
+    head.position.y = 1.75;
+    head.castShadow = true;
+    g.add(head);
+    g.position.set(x, 0, z);
+    g.rotation.y = rotY;
+    return g;
+  }
   const cafeteriaGroups = [];
   function buildCafeteria(px, pz, rotY) {
     // 2026-09-13 (feedback del usuario: "las cafeterias en ningun momento las he visto"):
     // comprobado por raycasting desde la camara de juego que SI se dibujan y nada las tapa
     // - el problema real es que, a la escala de un estadio entero, un kiosco de 4x3 unidades
     // se pierde visualmente contra el cesped. Se duplica de tamaño (comparable a un coche
-    // del parking, que si se ve bien) para que se note de verdad.
+    // del parking, que si se ve bien) para que se note de verdad. 2026-09-13 (segunda vuelta,
+    // "las cafeterias mas grandes"): se agranda otra vez, y se añaden cartel publicitario
+    // (marca inventada) + una mesa con sillas y un par de personas sentadas en la terraza.
     const g = new THREE.Group();
     const bodyMat = new THREE.MeshStandardMaterial({ color: CAFETERIA_COLORS[1].body, roughness: 0.8 });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(8, 6, 6.4), bodyMat);
-    body.position.y = 3;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(11, 7, 9), bodyMat);
+    body.position.y = 3.5;
     body.castShadow = body.receiveShadow = true;
     g.add(body);
     const roofMat = new THREE.MeshStandardMaterial({ color: CAFETERIA_COLORS[1].roof, roughness: 0.7 });
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(6.8, 3.4, 4), roofMat);
-    roof.position.y = 7.7;
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(8.5, 4, 4), roofMat);
+    roof.position.y = 9;
     roof.rotation.y = Math.PI / 4;
     g.add(roof);
+
+    // cartel publicitario en la pared frontal (la que da a la terraza, +Z local)
+    const brand = CAFETERIA_AD_BRANDS[(Math.random() * CAFETERIA_AD_BRANDS.length) | 0];
+    const adMat = new THREE.MeshBasicMaterial({ map: makeCafeteriaAdTexture(brand) });
+    const ad = new THREE.Mesh(new THREE.PlaneGeometry(7, 2.6), adMat);
+    ad.position.set(0, 4.6, 4.51);
+    g.add(ad);
+
+    // terraza: mesa + 4 sillas + 2 personas sentadas, delante del kiosco
+    const furnitureMat = new THREE.MeshStandardMaterial({ color: 0xf3e2c0, roughness: 0.7 });
+    const tableTop = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, 0.15, 10), furnitureMat);
+    tableTop.position.set(0, 1.1, 8);
+    tableTop.castShadow = true;
+    g.add(tableTop);
+    const tableLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.1, 6), furnitureMat);
+    tableLeg.position.set(0, 0.55, 8);
+    g.add(tableLeg);
+    [[-1.7, 7], [1.7, 7], [-1.7, 9], [1.7, 9]].forEach(([cx2, cz2]) => {
+      const seat = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.15, 0.7), furnitureMat);
+      seat.position.set(cx2, 0.7, cz2);
+      g.add(seat);
+      const back = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.1), furnitureMat);
+      back.position.set(cx2, 1.1, cz2 + (cz2 < 8 ? -0.3 : 0.3));
+      g.add(back);
+    });
+    g.add(buildSeatedPerson(-1.7, 7, Math.PI * 0.15));
+    g.add(buildSeatedPerson(1.7, 9, Math.PI * 1.1));
+
     g.position.set(px, 0, pz);
     g.rotation.y = rotY;
     g.visible = false;
@@ -3930,8 +4021,17 @@
   // hay UN aparcamiento a cada lado (espejados en X), mas cerca de la zona del jugador
   // (Z menos negativa) que las cafeterias laterales, que se han desplazado mas hacia el
   // fondo para dejarles sitio (ver CAFETERIA_SIDE_FRACS mas abajo).
+  // 2026-09-13 (segunda vuelta, el usuario dibujo encima de una foto donde queria el
+  // aparcamiento): en vez de un bloque compacto de 2 filas, ahora es una franja larga y
+  // estrecha que corre a lo largo del lateral (paralela al campo), con las plazas repartidas
+  // con huecos irregulares en vez de pegadas - se parece mas al dibujo (varias plazas
+  // sueltas salpicadas a lo largo del lateral) que a un parking de centro comercial.
   const PARKING_CENTER_X = FLOODLIGHT_OUTER_X + 60;
-  const PARKING_CENTER_Z = -55;
+  const PARKING_CENTER_Z = -75;
+  const PARKING_HALF_LENGTH = 95;
+  // offsets de Z (relativos a PARKING_CENTER_Z) de las 7 plazas de cada lateral - a
+  // proposito con huecos desiguales, no una rejilla perfecta
+  const PARKING_SPOT_Z_OFFSETS = [-90, -62, -38, -10, 18, 48, 82];
   const PARKING_MAX_SPOTS = 14; // 7 en cada lateral - ver PARKING_PACK_PRICE junto a BUILD_PACK_PRICE
   const parkingGroups = []; // uno por lado (sign -1/+1), visibilidad conjunta segun spotsBuilt>0
   const CAR_COLORS = [0xd8442e, 0x3b7dc9, 0xf3e2c0, 0x4f9e5c, 0xffffff, 0x2b2b2b, 0xe8b23a];
@@ -3977,21 +4077,25 @@
   const parkingCarGroups = []; // 14 en total, en el mismo orden en que se van desbloqueando
   [-1, 1].forEach(sign => {
     const g = new THREE.Group();
+    const asphaltTex = makeAsphaltTexture();
+    asphaltTex.repeat.set(1, 8); // franja estrecha (X) y larga (Z), ver PARKING_HALF_LENGTH
     const asphalt = new THREE.Mesh(
-      new THREE.PlaneGeometry(80, 22),
-      new THREE.MeshStandardMaterial({ map: makeAsphaltTexture(), roughness: 1 })
+      new THREE.PlaneGeometry(20, PARKING_HALF_LENGTH * 2 + 14),
+      new THREE.MeshStandardMaterial({ map: asphaltTex, roughness: 1 })
     );
     asphalt.rotation.x = -Math.PI / 2;
     asphalt.position.set(sign * PARKING_CENTER_X, 0.01, PARKING_CENTER_Z);
     asphalt.receiveShadow = true;
     g.add(asphalt);
-    for (let i = 0; i < 7; i++) {
-      const x = sign * PARKING_CENTER_X + (-27 + i * 9);
-      const carGroup = buildCar(x, PARKING_CENTER_Z, sign > 0 ? Math.PI : 0, CAR_COLORS[(Math.random() * CAR_COLORS.length) | 0]);
+    PARKING_SPOT_Z_OFFSETS.forEach(zOffset => {
+      const x = sign * PARKING_CENTER_X + (Math.random() - 0.5) * 6;
+      const z = PARKING_CENTER_Z + zOffset;
+      // coche perpendicular a la franja (aparcado "en bateria" a lo largo del lateral)
+      const carGroup = buildCar(x, z, sign > 0 ? Math.PI / 2 : -Math.PI / 2, CAR_COLORS[(Math.random() * CAR_COLORS.length) | 0]);
       carGroup.visible = false;
       g.add(carGroup);
       parkingCarGroups.push(carGroup);
-    }
+    });
     g.visible = false;
     scene.add(g);
     parkingGroups.push(g);
@@ -4010,14 +4114,15 @@
     return Math.abs(x) < halfX && z > minZ && z < maxZ;
   }
   function insideParkingFootprint(x, z) {
-    // aparcamiento espejado en los dos laterales (ver mas arriba) - Math.abs(x) para que la
-    // exclusion aplique igual a los dos lados
-    return Math.abs(Math.abs(x) - PARKING_CENTER_X) < 45 && Math.abs(z - PARKING_CENTER_Z) < 16;
+    // aparcamiento espejado en los dos laterales, ahora una franja larga y estrecha (ver
+    // PARKING_HALF_LENGTH) en vez de un bloque - Math.abs(x) para que la exclusion aplique
+    // igual a los dos lados
+    return Math.abs(Math.abs(x) - PARKING_CENTER_X) < 12 && Math.abs(z - PARKING_CENTER_Z) < PARKING_HALF_LENGTH + 8;
   }
   // 2026-09-13: la carretera sale ahora hacia AFUERA (+X) desde el borde del parking (que ya
   // esta en el lateral del estadio) en vez de discurrir en Z como antes - misma idea ("una
   // franja que lleva del parking hacia la ciudad de fondo"), adaptada a la nueva posicion.
-  const ROAD_CENTER_X = PARKING_CENTER_X + 45 + 190; // arranca pegada al borde exterior del parking
+  const ROAD_CENTER_X = PARKING_CENTER_X + 12 + 190; // arranca pegada al borde exterior de la franja de parking
   function insideRoadFootprint(x, z) {
     return Math.abs(z - PARKING_CENTER_Z) < 9 && x > ROAD_CENTER_X - 190 && x < ROAD_CENTER_X + 190;
   }
@@ -4049,7 +4154,7 @@
   scene.add(road);
 
   // arboles: tronco + copa, en InstancedMesh - unas cuantas variantes de verde y tamaño
-  const TREE_COUNT = 55;
+  const TREE_COUNT = 110; // subido de 55 (feedback del usuario: "quiero mas arboles")
   const trunkMesh = new THREE.InstancedMesh(
     new THREE.CylinderGeometry(0.35, 0.45, 3.5, 6),
     new THREE.MeshStandardMaterial({ color: 0x5a3f28, roughness: 0.9 }),
@@ -4755,6 +4860,36 @@
       }
     }
 
+    // esquinas diagonales (2026-09-13, feedback del usuario: capturo una foto del estadio
+    // "lleno" y marco con una "P" las dos esquinas que se quedaban vacias de publico pese a
+    // estar al 100% de ocupacion) - cornerMeshes ya calculaba la pieza diagonal que conecta
+    // el extremo de la lateral con el borde del fondo, pero nadie colocaba gente ahi. Mismo
+    // patron de columnas que el resto de gradas, repartidas a lo largo de esa diagonal.
+    [-1, 1].forEach(sign => {
+      if (!(standLength > 0.5 && fondoFraction >= 1)) return;
+      for (let row = 0; row < STAND_ROWS; row++) {
+        const rowHeight = STAND_ROW_HEIGHTS[row];
+        const latX = sign * (bottomHalf + STAND_MARGIN + (row + 0.5) * STAND_ROW_DEPTH);
+        const latZ = -standLength;
+        const fondoX = sign * (fondoWidth / 2);
+        const fondoZ = fondoRowMeshes[row].userData.zCenter;
+        const dx = fondoX - latX, dz = fondoZ - latZ;
+        const dist = Math.hypot(dx, dz);
+        if (dist <= 0.5) continue;
+        const cols = Math.max(1, Math.floor(dist / PERSON_SPACING_Z));
+        const order = Array.from({ length: cols }, (_, i) => i);
+        for (let i = order.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [order[i], order[j]] = [order[j], order[i]];
+        }
+        const attendanceCorner = Math.max(0, Math.min(cols, Math.round((occupancyFraction || 0) * cols)));
+        for (let i = 0; i < attendanceCorner && instanceIdx < STADIUM_MAX_PEOPLE; i++) {
+          const t = (order[i] + 0.5) / cols;
+          placePerson(latX + dx * t, latZ + dz * t, rowHeight, sign * 0.9);
+        }
+      }
+    });
+
     // nivel 2 (fase 3, 2026-09-06): mismo patron que el nivel 1, con UPPER_ROW_HEIGHTS y las
     // filas de upperStandRowMeshes/upperFondoRowMeshes en vez de las del nivel 1
     [-1, 1].forEach(sign => {
@@ -4803,6 +4938,32 @@
         placePerson(x, z, rowHeight, 0.9);
       }
     }
+
+    // esquinas diagonales del nivel 2 - mismo arreglo que en el nivel 1
+    [-1, 1].forEach(sign => {
+      if (!(upperStandLength > 0.5 && upperFondoFraction >= 1)) return;
+      for (let row = 0; row < STAND_ROWS; row++) {
+        const rowHeight = UPPER_ROW_HEIGHTS[row];
+        const latX = sign * (bottomHalf + STAND_MARGIN + (UPPER_ROW_OFFSET + row + 0.5) * STAND_ROW_DEPTH);
+        const latZ = -upperStandLength;
+        const fondoX = sign * (upperFondoWidth / 2);
+        const fondoZ = upperFondoRowMeshes[row].userData.zCenter;
+        const dx = fondoX - latX, dz = fondoZ - latZ;
+        const dist = Math.hypot(dx, dz);
+        if (dist <= 0.5) continue;
+        const cols = Math.max(1, Math.floor(dist / PERSON_SPACING_Z));
+        const order = Array.from({ length: cols }, (_, i) => i);
+        for (let i = order.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [order[i], order[j]] = [order[j], order[i]];
+        }
+        const attendanceCorner = Math.max(0, Math.min(cols, Math.round((occupancyFraction || 0) * cols)));
+        for (let i = 0; i < attendanceCorner && instanceIdx < STADIUM_MAX_PEOPLE; i++) {
+          const t = (order[i] + 0.5) / cols;
+          placePerson(latX + dx * t, latZ + dz * t, rowHeight, sign * 0.9);
+        }
+      }
+    });
 
     peopleBodyMesh.count = peopleHeadMesh.count = instanceIdx;
     hairMesh.count = instanceIdx;
