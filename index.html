@@ -3671,11 +3671,17 @@
       mastGroup.add(brace);
     });
 
-    // cabeza del foco: se inclina ADEMAS hacia abajo (pitch) para que el panel de bombillas
-    // quede claramente orientado al terreno de juego, no al cielo
+    // cabeza del foco: PlaneGeometry mira por defecto hacia +Z (normal (0,0,1)) - girando
+    // +90 grados en X esa normal pasa a (0,-1,0), es decir recto hacia ABAJO, hacia el campo.
+    // 2026-09-13 (corregido tras el 2o intento, feedback del usuario: "los focos... estan
+    // orientados hacia la camara... parece que estan alumbrando el cielo"): antes el signo
+    // estaba al reves (rotation.x = -0.55 en vez de +), lo que dejaba la normal apuntando
+    // sobre todo hacia +Z y algo hacia +Y (arriba) - literalmente lo contrario de "hacia el
+    // campo". Con +Math.PI/2 la normal es exactamente (0,-1,0): mire desde donde se mire, el
+    // panel siempre esta claramente orientado hacia abajo, no hacia la camara ni el cielo.
     const headGroup = new THREE.Group();
     headGroup.position.y = FLOODLIGHT_POLE_HEIGHT;
-    headGroup.rotation.x = -0.55; // ~31 grados hacia abajo
+    headGroup.rotation.x = Math.PI / 2;
     mastGroup.add(headGroup);
     const headMat = new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 0.7 });
     const head = new THREE.Mesh(new THREE.BoxGeometry(9, 5.5, 1.4), headMat);
