@@ -3677,8 +3677,12 @@
     scene.add(g);
     cafeteriaGroups.push(g);
   }
+  // 2026-09-13 (feedback del usuario, junto con la reubicacion del parking a los dos
+  // laterales): las cafeterias laterales se mueven mas hacia el fondo (fracs mas altos =
+  // mas cerca de la porteria) para dejar la zona mas cercana al jugador libre para el
+  // parking, que va mas hacia delante en el mismo lateral (ver PARKING_CENTER_Z).
   [-1, 1].forEach(sign => {
-    [0.28, 0.72].forEach(frac => {
+    [0.55, 0.85].forEach(frac => {
       buildCafeteria(sign * CAFETERIA_OUTER_X, -BOARD.length * frac, sign > 0 ? -Math.PI / 2 : Math.PI / 2);
     });
   });
@@ -3873,8 +3877,16 @@
   // automatica como las torres/cafeterias) - pedida por el usuario para "provocar que mas gente
   // vaya al estadio": aparcar cerca deja de ser un problema, asi que sube la ocupacion segun la
   // fraccion de plazas construidas (ver PARKING_OCCUPANCY_BONUS en computeLeagueOccupancy y su
-  // espejo en award_match_coins, supabase-stadium-parking.sql). Colocado delante del tablero
-  // (lado del jugador, +Z), la unica zona del cesped que quedaba totalmente vacia.
+  // espejo en award_match_coins, supabase-stadium-parking.sql).
+  // 2026-09-13 (reubicado, feedback del usuario: "los aparcamientos no se ven desde la vista
+  // aerea del juego... solo se vislumbran en la animacion, apenas medio segundo, prefiero
+  // que esten alrededor del estadio"): estaba colocado delante del tablero (lado del
+  // jugador, +Z) mas alla de TRAY_LENGTH - esa zona queda LITERALMENTE detras de la camara
+  // de juego normal (restCamPos esta en z~40-70 mirando hacia -Z), asi que nunca podia
+  // aparecer en pantalla salvo durante el barrido de camara inicial, que sí llega a rodear
+  // por ahi. Ahora se coloca al lateral del estadio (mismo lado donde ya se ven las
+  // cafeterias y las torres de iluminacion, dentro del campo de vision de la camara de
+  // juego), en vez de delante.
   function makeAsphaltTexture() {
     const s = 256;
     const c = document.createElement('canvas'); c.width = s; c.height = s;
@@ -3896,17 +3908,17 @@
     tex.repeat.set(3, 2);
     return tex;
   }
-  const PARKING_CENTER_Z = TRAY_LENGTH + 70;
-  const PARKING_MAX_SPOTS = 14; // 2 filas de 7 - ver PARKING_PACK_PRICE junto a BUILD_PACK_PRICE
-  const parkingGroup = new THREE.Group();
-  const asphalt = new THREE.Mesh(
-    new THREE.PlaneGeometry(90, 60),
-    new THREE.MeshStandardMaterial({ map: makeAsphaltTexture(), roughness: 1 })
-  );
-  asphalt.rotation.x = -Math.PI / 2;
-  asphalt.position.set(0, 0.01, PARKING_CENTER_Z);
-  asphalt.receiveShadow = true;
-  parkingGroup.add(asphalt);
+  // lateral, a la altura de la mitad del tablero - mismo criterio que CAFETERIA_OUTER_X/
+  // FLOODLIGHT_OUTER_X (fuera de las gradas), pero un poco mas afuera para no pisarlas.
+  // 2026-09-13 (feedback del usuario: "los parkings en los dos laterales del estadio,
+  // dejando hueco para las cafeterias en el lateral tambien pero mas hacia el fondo"): ahora
+  // hay UN aparcamiento a cada lado (espejados en X), mas cerca de la zona del jugador
+  // (Z menos negativa) que las cafeterias laterales, que se han desplazado mas hacia el
+  // fondo para dejarles sitio (ver CAFETERIA_SIDE_FRACS mas abajo).
+  const PARKING_CENTER_X = FLOODLIGHT_OUTER_X + 60;
+  const PARKING_CENTER_Z = -55;
+  const PARKING_MAX_SPOTS = 14; // 7 en cada lateral - ver PARKING_PACK_PRICE junto a BUILD_PACK_PRICE
+  const parkingGroups = []; // uno por lado (sign -1/+1), visibilidad conjunta segun spotsBuilt>0
   const CAR_COLORS = [0xd8442e, 0x3b7dc9, 0xf3e2c0, 0x4f9e5c, 0xffffff, 0x2b2b2b, 0xe8b23a];
   // coche con mas pinta de coche (2026-09-06, feedback: "quiero los coches realistas no
   // cuadrados") - chasis bajo + cabina mas estrecha y retranqueada (da forma de capo/maletero
@@ -3945,18 +3957,30 @@
     g.rotation.y = rotY;
     return g;
   }
-  const parkingCarGroups = []; // una entrada por plaza, en el mismo orden en que se construyen
-  for (let row = 0; row < 2; row++) {
+  // una fila de 7 plazas en cada lateral (espejadas en X) - el orden de aparicion al ir
+  // comprando packs llena primero el lateral izquierdo entero y luego el derecho
+  const parkingCarGroups = []; // 14 en total, en el mismo orden en que se van desbloqueando
+  [-1, 1].forEach(sign => {
+    const g = new THREE.Group();
+    const asphalt = new THREE.Mesh(
+      new THREE.PlaneGeometry(80, 22),
+      new THREE.MeshStandardMaterial({ map: makeAsphaltTexture(), roughness: 1 })
+    );
+    asphalt.rotation.x = -Math.PI / 2;
+    asphalt.position.set(sign * PARKING_CENTER_X, 0.01, PARKING_CENTER_Z);
+    asphalt.receiveShadow = true;
+    g.add(asphalt);
     for (let i = 0; i < 7; i++) {
-      const x = -27 + i * 9, z = PARKING_CENTER_Z + (row === 0 ? -13 : 13);
-      const carGroup = buildCar(x, z, row === 0 ? Math.PI : 0, CAR_COLORS[(Math.random() * CAR_COLORS.length) | 0]);
+      const x = sign * PARKING_CENTER_X + (-27 + i * 9);
+      const carGroup = buildCar(x, PARKING_CENTER_Z, sign > 0 ? Math.PI : 0, CAR_COLORS[(Math.random() * CAR_COLORS.length) | 0]);
       carGroup.visible = false;
-      parkingGroup.add(carGroup);
+      g.add(carGroup);
       parkingCarGroups.push(carGroup);
     }
-  }
-  parkingGroup.visible = false;
-  scene.add(parkingGroup);
+    g.visible = false;
+    scene.add(g);
+    parkingGroups.push(g);
+  });
 
   // ---- vida alrededor del estadio (2026-09-06, pedido por el usuario): arboles, una
   // carretera de acceso desde el parking hacia la ciudad, y gente paseando perros por el
@@ -3971,34 +3995,42 @@
     return Math.abs(x) < halfX && z > minZ && z < maxZ;
   }
   function insideParkingFootprint(x, z) {
-    return Math.abs(x) < 50 && Math.abs(z - PARKING_CENTER_Z) < 35;
+    // aparcamiento espejado en los dos laterales (ver mas arriba) - Math.abs(x) para que la
+    // exclusion aplique igual a los dos lados
+    return Math.abs(Math.abs(x) - PARKING_CENTER_X) < 45 && Math.abs(z - PARKING_CENTER_Z) < 16;
   }
-  const ROAD_X = 65; // carretera lateral, a un lado del parking - une el parking con la ciudad
+  // 2026-09-13: la carretera sale ahora hacia AFUERA (+X) desde el borde del parking (que ya
+  // esta en el lateral del estadio) en vez de discurrir en Z como antes - misma idea ("una
+  // franja que lleva del parking hacia la ciudad de fondo"), adaptada a la nueva posicion.
+  const ROAD_CENTER_X = PARKING_CENTER_X + 45 + 190; // arranca pegada al borde exterior del parking
   function insideRoadFootprint(x, z) {
-    return Math.abs(x - ROAD_X) < 9 && z > 40 && z < 420;
+    return Math.abs(z - PARKING_CENTER_Z) < 9 && x > ROAD_CENTER_X - 190 && x < ROAD_CENTER_X + 190;
   }
 
   // carretera de acceso: una franja recta con linea discontinua central, del borde del
   // parking hacia la ciudad de fondo
   function makeRoadTexture() {
-    const w = 64, h = 512;
+    // 2026-09-13: la carretera ahora corre a lo largo de X (antes corria a lo largo de Z) -
+    // la linea discontinua se dibuja a lo largo del ANCHO del canvas (w, mapeado a U/X) en
+    // vez de a lo largo del alto (h), para no tener que rotar la textura aparte
+    const w = 512, h = 64;
     const c = document.createElement('canvas'); c.width = w; c.height = h;
     const cx = c.getContext('2d');
     cx.fillStyle = '#333338';
     cx.fillRect(0, 0, w, h);
     cx.fillStyle = 'rgba(235,225,200,0.9)';
-    for (let y = 6; y < h; y += 26) cx.fillRect(w / 2 - 1.5, y, 3, 14);
+    for (let x = 6; x < w; x += 26) cx.fillRect(x, h / 2 - 1.5, 14, 3);
     return new THREE.CanvasTexture(c);
   }
   const roadTex = makeRoadTexture();
-  roadTex.wrapT = THREE.RepeatWrapping;
-  roadTex.repeat.set(1, 12);
+  roadTex.wrapS = THREE.RepeatWrapping;
+  roadTex.repeat.set(12, 1);
   const road = new THREE.Mesh(
-    new THREE.PlaneGeometry(16, 380),
+    new THREE.PlaneGeometry(380, 16),
     new THREE.MeshStandardMaterial({ map: roadTex, roughness: 1 })
   );
   road.rotation.x = -Math.PI / 2;
-  road.position.set(ROAD_X, 0.015, 230);
+  road.position.set(ROAD_CENTER_X, 0.015, PARKING_CENTER_Z);
   scene.add(road);
 
   // arboles: tronco + copa, en InstancedMesh - unas cuantas variantes de verde y tamaño
@@ -4523,7 +4555,7 @@
     // asientos. parkingSpotsBuilt viene de la columna parking_spots_built (ver
     // supabase-stadium-parking.sql).
     const spotsBuilt = parkingSpotsBuilt || 0;
-    parkingGroup.visible = spotsBuilt > 0;
+    parkingGroups.forEach(g => { g.visible = spotsBuilt > 0; });
     parkingCarGroups.forEach((g, i) => { g.visible = i < spotsBuilt; });
     // gruas (fase 6, 2026-09-06): visibles SOLO durante la partida siguiente a haber comprado
     // un pack de construccion/reforma (ver activeMatchConstructionZone, consumido en
