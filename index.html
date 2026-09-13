@@ -3605,18 +3605,28 @@
   }
 
   // ---- torres de iluminacion (fase 5, 2026-09-06): decoracion pura, "premio" visual al
-  // completar el aforo entero (500) - una en cada esquina exterior del estadio, mas alla del
-  // nivel 2. Focos con material emisivo (brillan solo, sin luces dinamicas de THREE.js reales)
-  // para no tocar el rendimiento en moviles de gama baja (ver comentario del Samsung A70 en
-  // stepPuck) ----
+  // completar el aforo entero (500) - una en cada esquina, encima de las gradas. Focos con
+  // material emisivo (brillan solo, sin luces dinamicas de THREE.js reales) para no tocar
+  // el rendimiento en moviles de gama baja (ver comentario del Samsung A70 en stepPuck).
+  // 2026-09-13 (feedback del usuario: "las torretas de luz estan fatal ahi puestas porque
+  // estan fuera del estadio, deberian estar encima de las tribunas, con un palo mas corto"):
+  // antes estaban plantadas en el suelo, MAS ALLA del borde exterior de las gradas
+  // (FLOODLIGHT_OUTER_X, que sigue existiendo y usandose para colocar cafeterias/parking/
+  // gruas fuera del estadio) - parecian postes sueltos en el cesped. Ahora se apoyan en el
+  // borde trasero de la fila mas alta del nivel 2 (FLOODLIGHT_STAND_TOP_X, el borde de la
+  // grada en si, sin salirse de ella) y arrancan desde la altura del techo de esa grada
+  // (FLOODLIGHT_STAND_TOP_Y) en vez de desde el suelo - el palo visible se acorta a juego
+  // (ya no necesita cubrir esos 32 de grada por debajo).
   const FLOODLIGHT_OUTER_X = bottomHalf + STAND_MARGIN + 2 * STAND_ROWS * STAND_ROW_DEPTH + 8;
+  const FLOODLIGHT_STAND_TOP_X = bottomHalf + STAND_MARGIN + 2 * STAND_ROWS * STAND_ROW_DEPTH;
+  const FLOODLIGHT_STAND_TOP_Y = UPPER_ROW_HEIGHTS[STAND_ROWS - 1];
   const FLOODLIGHT_POSITIONS = [
-    [FLOODLIGHT_OUTER_X, 6], [-FLOODLIGHT_OUTER_X, 6],
-    [FLOODLIGHT_OUTER_X, -(BOARD.length + BOARD.gateDepth + FONDO_MARGIN + UPPER_ROW_OFFSET * STAND_ROW_DEPTH * 2 + 6)],
-    [-FLOODLIGHT_OUTER_X, -(BOARD.length + BOARD.gateDepth + FONDO_MARGIN + UPPER_ROW_OFFSET * STAND_ROW_DEPTH * 2 + 6)],
+    [FLOODLIGHT_STAND_TOP_X, 6], [-FLOODLIGHT_STAND_TOP_X, 6],
+    [FLOODLIGHT_STAND_TOP_X, -(BOARD.length + BOARD.gateDepth + FONDO_MARGIN + UPPER_ROW_OFFSET * STAND_ROW_DEPTH * 2 + 6)],
+    [-FLOODLIGHT_STAND_TOP_X, -(BOARD.length + BOARD.gateDepth + FONDO_MARGIN + UPPER_ROW_OFFSET * STAND_ROW_DEPTH * 2 + 6)],
   ];
   const floodlightGroups = [];
-  const FLOODLIGHT_POLE_HEIGHT = 42;
+  const FLOODLIGHT_POLE_HEIGHT = 18; // antes 42 - ya no arranca desde el suelo, no le hace falta ser tan largo
   FLOODLIGHT_POSITIONS.forEach(([px, pz]) => {
     const g = new THREE.Group();
     const poleMat = new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 0.6, metalness: 0.4 });
@@ -3637,7 +3647,7 @@
         g.add(bulb);
       }
     }
-    g.position.set(px, 0, pz);
+    g.position.set(px, FLOODLIGHT_STAND_TOP_Y, pz);
     g.visible = false;
     scene.add(g);
     floodlightGroups.push(g);
@@ -3658,15 +3668,20 @@
   };
   const cafeteriaGroups = [];
   function buildCafeteria(px, pz, rotY) {
+    // 2026-09-13 (feedback del usuario: "las cafeterias en ningun momento las he visto"):
+    // comprobado por raycasting desde la camara de juego que SI se dibujan y nada las tapa
+    // - el problema real es que, a la escala de un estadio entero, un kiosco de 4x3 unidades
+    // se pierde visualmente contra el cesped. Se duplica de tamaño (comparable a un coche
+    // del parking, que si se ve bien) para que se note de verdad.
     const g = new THREE.Group();
     const bodyMat = new THREE.MeshStandardMaterial({ color: CAFETERIA_COLORS[1].body, roughness: 0.8 });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 3.2), bodyMat);
-    body.position.y = 1.5;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(8, 6, 6.4), bodyMat);
+    body.position.y = 3;
     body.castShadow = body.receiveShadow = true;
     g.add(body);
     const roofMat = new THREE.MeshStandardMaterial({ color: CAFETERIA_COLORS[1].roof, roughness: 0.7 });
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(3.4, 1.7, 4), roofMat);
-    roof.position.y = 3.85;
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(6.8, 3.4, 4), roofMat);
+    roof.position.y = 7.7;
     roof.rotation.y = Math.PI / 4;
     g.add(roof);
     g.position.set(px, 0, pz);
