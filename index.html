@@ -1284,11 +1284,16 @@
   // tras una primera version de compra unica. PARKING_MAX_SPOTS esta junto a la geometria 3D
   // del parking mas abajo.
   // 2026-09-13: subido de 14 plazas totales (packs de 1) a 140 (packs de 10) - pedido por el
-  // usuario ("14 es ridiculo" para un estadio de 500 asientos). Precio por plaza SIN CAMBIOS
-  // (18/plaza) para no romper el balance economico ya ajustado - solo cambia el tamano del
-  // pack, igual que BUILD_PACK_PRICE ya hace con los asientos.
+  // usuario ("14 es ridiculo" para un estadio de 500 asientos).
+  // 2026-09-14 (correccion, feedback del usuario "no es un poco caro hacer parkings?"): el
+  // precio SI tenia que cambiar, al reves de lo que pensaba el 09-13 - PARKING_OCCUPANCY_BONUS
+  // (el beneficio real de tener el parking al 100%) es el mismo tope tanto con 14/14 como con
+  // 140/140 plazas, asi que mantener 18 monedas/PLAZA multiplicaba por 10 el coste total
+  // (252 -> 2520) para exactamente el mismo beneficio de siempre. El precio por PACK se deja
+  // igual que el precio por plaza de la version vieja (18/pack, no 18/plaza), asi el coste
+  // total de completar el parking sigue siendo 252 monedas, igual que cuando habia 14 plazas.
   const PARKING_PACK_SIZE = 10;
-  const PARKING_PACK_PRICE = 180; // 14 packs x 180 = 2520 -> 140 plazas x 18/plaza, mismo precio unitario que antes
+  const PARKING_PACK_PRICE = 18; // 14 packs x 18 = 252, igual que el coste total de la version de 14 plazas
   // fase 9 (2026-09-07): cafeterias como INVERSION, no decoracion gratis - pedido por el
   // usuario ("deberian ser una inversion que reporten dinero... cuanto mayor y mejor sea el
   // estadio mas premium pueden ser"). Nivel 1 (basica) solo pide monedas (una vez desbloqueado
