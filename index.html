@@ -4281,8 +4281,16 @@
   // verdad. Un solo bloque compacto por lateral (PARKING_ROWS_PER_SIDE x PARKING_SPOTS_PER_ROW)
   // en vez de una franja larga con huecos, con un unico asfalto continuo por lado (no una
   // franja por fila) para que se vea como un aparcamiento real, no como carriles sueltos.
-  const PARKING_CENTER_X = FLOODLIGHT_OUTER_X + 64; // centro del bloque completo de cada lateral - deja hueco con CAFETERIA_OUTER_X (+34)
-  const PARKING_CENTER_Z = -75;
+  // 2026-09-27 (cuarta vuelta - feedback del usuario: "quería que los parkings estuvieran
+  // detrás del fondo del estadio... cuando baja la cámara se ven los edificios y ese terreno
+  // verde, ahí quedaría bien... de la otra manera nunca se llegan a ver"): el parking pasa del
+  // lateral (a la altura de mitad de campo) a la zona detrás del fondo, la misma que se ve
+  // despejada con la ciudad de fondo durante el barrido de camara inicial (startDroneIntro).
+  // Se deja un bloque a cada lado de la cafeteria central del fondo (ver
+  // "buildCafeteria(0, ...)" mas abajo, en Z ~-274) sin tocar su geometria (misma rejilla
+  // compacta de siempre) - solo cambia DONDE se planta el bloque.
+  const PARKING_CENTER_X = 55; // a cada lado de la cafeteria central del fondo (que esta en X=0), sin pisarla
+  const PARKING_CENTER_Z = -(BOARD.length + BOARD.gateDepth + FONDO_MARGIN * 2 + STAND_ROWS * STAND_ROW_DEPTH * 2 + 60); // ~60 unidades mas atras que la cafeteria del fondo, ya en terreno abierto
   const PARKING_SPOTS_PER_ROW = 14;
   const PARKING_ROWS_PER_SIDE = 5;
   const PARKING_MAX_SPOTS = PARKING_SPOTS_PER_ROW * PARKING_ROWS_PER_SIDE * 2; // 140
