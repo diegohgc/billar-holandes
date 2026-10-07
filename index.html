@@ -781,6 +781,7 @@
 
   document.getElementById('menuOnlineBtn').addEventListener('click', async () => {
     mainMenuOverlayHide();
+    pushBackState('onlineFlow');
     const { data: { session } } = await sb.auth.getSession();
     if (!session) {
       document.getElementById('onlineLoginScreen').style.display = 'flex';
@@ -789,7 +790,18 @@
     await goToProfileOrHub();
   });
   function mainMenuOverlayHide() { document.getElementById('mainMenu').style.display = 'none'; }
-  function backToMainMenu() { document.getElementById('mainMenu').style.display = 'flex'; }
+  function backToMainMenu() {
+    document.getElementById('mainMenu').style.display = 'flex';
+    // al volver al menu principal NO puede quedar colgado el estado de historial de Jugar
+    // Local/Online (p.ej. tras jugar una partida, el hub/setup se oculta sin pulsar su boton
+    // "Cerrar" y su estado seguia ahi): si no, el primer "atras" desde el menu se gastaria en
+    // ese estado fantasma en vez de salir de la app. closingViaOwnButton ya activo = el propio
+    // boton de cierre acaba de pedir ese history.back() - no repetirlo.
+    if (!closingViaOwnButton && history.state && (history.state.psScreen === 'onlineFlow' || history.state.psScreen === 'setup')) {
+      closingViaOwnButton = true;
+      history.back();
+    }
+  }
 
   // ---- boton "atras" del sistema Android (2026-09-27, bug reportado por el usuario: "si estas
   // en una clasificacion, sale del juego en vez de cerrar la pantalla") ----
@@ -813,6 +825,26 @@
     onlineRankRulesScreen: 'closeOnlineRankRulesBtn',
     leaderboardScreen: 'closeLeaderboardBtn',
     instructionsScreen: 'closeInstructionsBtn',
+    // flujo de Jugar Local / Jugar Online (2026-10-07: el usuario reporto que desde ahi el atras
+    // seguia saliendo de la app - antes se dejaron fuera por prudencia): login, crear perfil y
+    // hub online comparten UNA entrada de historial ('onlineFlow') porque pasan de una a otra
+    // sin que el usuario vuelva al menu principal entre medias
+    setup: 'setupBackBtn',
+    onlineLoginScreen: 'onlineLoginBackBtn',
+    onlineHubScreen: 'onlineHubBackBtn',
+  };
+  // pantallas sin boton "Cerrar" propio: el atras ejecuta esta accion en su lugar
+  const BACK_CLOSE_ACTIONS = {
+    onlineProfileScreen: () => {
+      document.getElementById('onlineProfileScreen').style.display = 'none';
+      backToMainMenu();
+    },
+  };
+  // etiqueta del estado de historial que corresponde a cada pantalla (por defecto, su propio id)
+  const BACK_STATE_LABEL = {
+    onlineLoginScreen: 'onlineFlow',
+    onlineProfileScreen: 'onlineFlow',
+    onlineHubScreen: 'onlineFlow',
   };
   function pushBackState(screenId) {
     history.pushState({ psScreen: screenId }, '');
@@ -828,7 +860,7 @@
     const btn = document.getElementById(btnId);
     if (!btn) return;
     btn.addEventListener('click', () => {
-      if (history.state && history.state.psScreen === screenId) {
+      if (history.state && history.state.psScreen === (BACK_STATE_LABEL[screenId] || screenId)) {
         closingViaOwnButton = true;
         history.back();
       }
@@ -843,6 +875,10 @@
         if (btn) btn.click();
         return;
       }
+    }
+    for (const [screenId, action] of Object.entries(BACK_CLOSE_ACTIONS)) {
+      const screenEl = document.getElementById(screenId);
+      if (screenEl && screenEl.style.display !== 'none') { action(); return; }
     }
   });
 
@@ -2480,6 +2516,7 @@
   document.getElementById('menuLocalBtn').addEventListener('click', () => {
     mainMenuEl.style.display = 'none';
     setupEl.style.display = 'flex';
+    pushBackState('setup');
     populateKnownPlayerNames();
   });
   document.getElementById('menuInstructionsBtn').addEventListener('click', () => {
