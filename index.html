@@ -3191,47 +3191,49 @@
     document.getElementById('leagueReminderBanner').style.display = 'none';
     if (isOnlineSoloMatch && currentSession) {
       const r = ranked[0];
-      // 2026-09-24 (bug reportado por el usuario: "en el resumen final... lo que hace
-      // realmente es predecir el numero de espectadores de la SIGUIENTE partida"): antes,
-      // este insert y la llamada a award_match_coins de mas abajo se disparaban en PARALELO
-      // (sin esperar el uno al otro). award_match_coins calcula la asistencia a partir de
-      // league_ranking, que es una VISTA que promedia solo_matches EN VIVO - si esa llamada
-      // llegaba antes de que este insert terminara de confirmarse, el aforo mostrado en el
-      // resumen final todavia no contaba la partida recien jugada, y por tanto reflejaba en
-      // realidad la clasificacion "antes de esta partida" (= la prediccion de la siguiente).
-      // Ahora award_match_coins se encadena DENTRO del .then() de este insert, para
-      // garantizar que la partida ya esta guardada (y por tanto cuenta en league_ranking)
-      // antes de calcular el aforo/las monedas de esta misma partida.
-      sb.from('solo_matches').insert({ player_id: currentSession.user.id, score: r.score, sets: r.sets })
-        .then(({ error }) => {
-          if (error) { console.error('solo_matches insert failed:', error); alert('Error guardando partida online: ' + error.message); return; }
-          // si esta es la 1a o 2a partida online de la semana, avisar de que hacen falta 3 para
-          // que la liga cuente de verdad (con solo 1 o 2, alguien podria jugar unas pocas veces
-          // muy bien y no volver a arriesgarse - con el minimo de 3, esa puntuacion no cuenta
-          // hasta la tercera partida)
-          sb.from('league_ranking').select('matches_played').eq('player_id', currentSession.user.id).maybeSingle()
-            .then(({ data }) => {
-              if (data && (data.matches_played === 1 || data.matches_played === 2)) {
-                document.getElementById('leagueReminderBanner').style.display = 'block';
-              }
-            });
-          // monedas del estadio: solo se ganan en partidas online (1 moneda cada 10 puntos,
-          // + 1 moneda por cada SET anotado desde el 2026-09-24, pedido por el usuario) - ver
-          // supabase-stadium.sql. El local nunca llama a esto. Desde el 2026-09-06 la funcion
-          // devuelve un objeto (no solo el neto) con el desglose completo - ver
-          // supabase-stadium-finance-breakdown.sql - para poder mostrar la pantalla de
-          // showStadiumFinanceScreen con espectadores/recaudacion/gastos por separado.
-          sb.rpc('award_match_coins', { match_score: r.score, match_sets: r.sets }).then(({ data, error }) => {
-            if (error) { console.error('award_match_coins failed:', error); return; }
-            // el neto puede ser negativo desde el 2026-09-05: el mantenimiento del estadio (ver
-            // supabase-stadium-maintenance.sql) se descuenta aqui mismo, asi que si supera lo
-            // ganado esta partida el balance neto sale en rojo en vez de no mostrar nada
-            showCoinToast(data.net);
-            showStadiumFinanceScreen(data);
-            activeMatchConstructionZone = null; // la obra de esta partida ya se ha visto, no se repite en la pantalla de resultados
-            loadStadiumVisualData(); // el aforo puede haber cambiado si esta partida movio tu posicion en la liga
-          });
-        });
+      // ORDEN IMPORTANTE (corregido 2026-10-09): primero award_match_coins, DESPUES el insert de
+      // la partida en solo_matches. El publico de ESTA partida es el que el jugador vio al
+      // empezar (HUD/estadio), calculado con la clasificacion de ANTES de jugarla - y
+      // award_match_coins lee league_ranking, una VISTA que promedia solo_matches en vivo: si
+      // la partida ya estuviera insertada, el resumen final mostraria el publico de la
+      // SIGUIENTE partida (p.ej. durante la partida "130 espectadores" y en el resumen "450" al
+      // entrar la 3a partida de la semana, que es cuando la puntuacion empieza a contar y la
+      // posicion en la liga salta). El 2026-09-24 se encadeno al reves (insert primero) por una
+      // lectura equivocada de una queja anterior - eso hizo el fallo determinista en vez de
+      // arreglarlo. currentMatchVariance es la misma variacion aleatoria (+-6%) que ya uso el
+      // HUD al empezar, asi el numero final coincide EXACTO con el que se vio jugando (el
+      // servidor la acota a 0.94-1.06, ver supabase-stadium-match-variance.sql).
+      (async () => {
+        let awardRes = await sb.rpc('award_match_coins', { match_score: r.score, match_sets: r.sets, match_variance: currentMatchVariance });
+        if (awardRes.error && /match_variance|PGRST202/i.test((awardRes.error.message || '') + (awardRes.error.code || ''))) {
+          // servidor todavia sin la migracion de match_variance: reintentar sin el parametro
+          awardRes = await sb.rpc('award_match_coins', { match_score: r.score, match_sets: r.sets });
+        }
+        if (awardRes.error) {
+          console.error('award_match_coins failed:', awardRes.error);
+        } else {
+          const data = awardRes.data;
+          // el neto puede ser negativo desde el 2026-09-05: el mantenimiento del estadio (ver
+          // supabase-stadium-maintenance.sql) se descuenta aqui mismo, asi que si supera lo
+          // ganado esta partida el balance neto sale en rojo en vez de no mostrar nada
+          showCoinToast(data.net);
+          showStadiumFinanceScreen(data);
+          activeMatchConstructionZone = null; // la obra de esta partida ya se ha visto, no se repite en la pantalla de resultados
+        }
+        const { error: insertError } = await sb.from('solo_matches').insert({ player_id: currentSession.user.id, score: r.score, sets: r.sets });
+        if (insertError) { console.error('solo_matches insert failed:', insertError); alert('Error guardando partida online: ' + insertError.message); return; }
+        // si esta es la 1a o 2a partida online de la semana, avisar de que hacen falta 3 para
+        // que la liga cuente de verdad (con solo 1 o 2, alguien podria jugar unas pocas veces
+        // muy bien y no volver a arriesgarse - con el minimo de 3, esa puntuacion no cuenta
+        // hasta la tercera partida)
+        const { data: lr } = await sb.from('league_ranking').select('matches_played').eq('player_id', currentSession.user.id).maybeSingle();
+        if (lr && (lr.matches_played === 1 || lr.matches_played === 2)) {
+          document.getElementById('leagueReminderBanner').style.display = 'block';
+        }
+        // ahora que la partida ya cuenta en la clasificacion, recalcular el publico PARA LA
+        // SIGUIENTE partida (puede haber cambiado si esta movio tu posicion en la liga)
+        loadStadiumVisualData();
+      })();
       isOnlineSoloMatch = false;
     }
     // el "record global del dispositivo" es un marcador local (localStorage, sin banderas ni
@@ -5401,7 +5403,7 @@
   // valor que en award_match_coins en el servidor (ver supabase-stadium-parking.sql) - deben ir
   // siempre a la par.
   const PARKING_OCCUPANCY_BONUS = 0.12;
-  async function computeLeagueOccupancy(leagueDivision, playerId, parkingSpotsBuilt) {
+  async function computeLeagueOccupancy(leagueDivision, playerId, parkingSpotsBuilt, varianceFactor) {
     if (!leagueDivision || !playerId) return 0;
     const { data: rows } = await sb.from('league_ranking').select('player_id, week_score')
       .eq('league_division', leagueDivision).order('week_score', { ascending: false });
@@ -5431,7 +5433,7 @@
     // que salia el mismo numero clavado partida tras partida - correcto pero con pinta de bug.
     // +-6% aleatorio en cada llamada, igual que en award_match_coins en el servidor (ver
     // supabase-stadium-attendance-variance.sql) - deben ir siempre a la par.
-    occupancy *= 0.94 + Math.random() * 0.12;
+    occupancy *= (varianceFactor != null ? varianceFactor : 0.94 + Math.random() * 0.12);
     return Math.max(0, Math.min(1, occupancy));
   }
 
@@ -5443,7 +5445,9 @@
     const { data: profile } = await sb.from('profiles').select('seats_built, material_tier, renovated_seats, league_division, name, country, coins, parking_spots_built, cafeteria_tier')
       .eq('id', currentSession.user.id).maybeSingle();
     if (!profile) { updateStadiumVisual(0, 1, 0, 0); hudCoins = hudDivision = hudAttendance = null; hudCrowdFraction = 0; return; }
-    const occupancy = await computeLeagueOccupancy(profile.league_division, currentSession.user.id, profile.parking_spots_built);
+    // una variacion por partida (+-6%): la misma que se manda a award_match_coins al acabar
+    currentMatchVariance = 0.94 + Math.random() * 0.12;
+    const occupancy = await computeLeagueOccupancy(profile.league_division, currentSession.user.id, profile.parking_spots_built, currentMatchVariance);
     updateStadiumVisual(profile.seats_built || 0, profile.material_tier || 1, profile.renovated_seats || 0, occupancy, profile.name, profile.country, profile.parking_spots_built, profile.cafeteria_tier);
     // guardados aparte para el HUD de la partida (ver refreshHud) - se pintan solo en
     // partidas online, junto al resto del marcador
@@ -5460,6 +5464,7 @@
     hudCrowdFraction = hudAttendance / STADIUM_TOTAL_SEATS; // 0..1 sobre el aforo TOTAL del estadio (350)
   }
   let hudCoins = null, hudDivision = null, hudAttendance = null, hudCrowdFraction = 0;
+  let currentMatchVariance = null;
 
   // mini vista 2D (canvas, no 3D) de un estadio - se usa tanto en "Mi Estadio" como en el
   // perfil de otro jugador desde la clasificacion, para no montar una segunda escena 3D
