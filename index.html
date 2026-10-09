@@ -2369,6 +2369,61 @@
   let shotsLeft = 0;
   let gamePhase = 'setup'; // 'setup' | 'playing' | 'finished'
 
+  // ---- actualizacion automatica (2026-10-09, pedido por el usuario: "que la gente vea los
+  // cambios sin tener que borrar cache ni datos", como hace QuickTemp) ----
+  // El problema real: la pagina se carga UNA vez y se queda en memoria - sobre todo en el
+  // WebView de Android, donde la app puede pasar dias en segundo plano sin recargarse. Aunque
+  // la web ya este publicada, quien no cierre la app del todo sigue con la version vieja.
+  // QuickTemp lo resuelve con un Service Worker (red primero + comprobar version al volver a
+  // primer plano + recargar al detectar una nueva). Aqui no hace falta Service Worker ni
+  // numero de version que subir a mano en cada cambio: se pregunta al servidor (HEAD, sin
+  // cache) por el ETag/Last-Modified de esta misma pagina y, si ha cambiado desde que se
+  // cargo, se recarga sola. Se comprueba al volver a primer plano y cada 10 min.
+  // IMPORTANTE (a diferencia de QuickTemp): recargar a mitad de partida la perderia, asi que
+  // solo se recarga cuando el menu principal esta visible y no hay partida en curso; si hay
+  // una actualizacion pendiente, se espera al siguiente momento seguro (se reintenta cada 2 s).
+  (function setupAutoUpdate() {
+    const PAGE_URL = location.pathname; // sin query ni hash (la app Android anade ?app=android)
+    const CHECK_EVERY_MS = 10 * 60 * 1000;
+    const MIN_RELOAD_GAP_MS = 2 * 60 * 1000; // red de seguridad contra bucles de recarga
+    // fecha que mando el servidor con ESTA copia de la pagina (Last-Modified) - asi tambien se
+    // detecta una pagina que se cargo ya vieja desde una cache del navegador
+    const loadedLM = Date.parse(document.lastModified) || 0;
+    let baselineEtag = null;
+    let updatePending = false;
+    const pageVersion = async () => {
+      const resp = await fetch(PAGE_URL, { method: 'HEAD', cache: 'no-store' });
+      if (!resp.ok) return null;
+      return { etag: resp.headers.get('etag') || '', lm: Date.parse(resp.headers.get('last-modified') || '') || 0 };
+    };
+    const safeToReload = () =>
+      gamePhase !== 'playing' && mainMenuEl.style.display !== 'none';
+    const tryReload = () => {
+      if (!updatePending) return;
+      if (!safeToReload()) { setTimeout(tryReload, 2000); return; }
+      let last = 0;
+      try { last = +sessionStorage.getItem('ps_last_auto_reload') || 0; } catch (e) {}
+      const wait = MIN_RELOAD_GAP_MS - (Date.now() - last);
+      if (wait > 0) { setTimeout(tryReload, wait + 500); return; }
+      try { sessionStorage.setItem('ps_last_auto_reload', String(Date.now())); } catch (e) {}
+      location.reload();
+    };
+    const check = async () => {
+      if (updatePending) return;
+      try {
+        const v = await pageVersion();
+        if (!v || (!v.etag && !v.lm)) return; // el servidor no manda cabeceras de version: no se puede comparar
+        if (baselineEtag === null) baselineEtag = v.etag;
+        const serverNewer = v.lm && loadedLM && (v.lm - loadedLM > 1500);
+        const etagChanged = v.etag && baselineEtag && v.etag !== baselineEtag;
+        if (serverNewer || etagChanged) { updatePending = true; tryReload(); }
+      } catch (e) { /* sin conexion: se reintenta en la proxima comprobacion */ }
+    };
+    check(); // fija el ETag "con el que se cargo esta pagina" (y detecta ya una copia vieja)
+    setInterval(check, CHECK_EVERY_MS);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+  })();
+
   function refreshHud() {
     if (gamePhase !== 'playing') return;
     const p = players[curPlayerIdx];
