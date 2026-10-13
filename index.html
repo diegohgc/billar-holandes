@@ -690,6 +690,7 @@
 
   async function goToProfileOrHub() {
     const profile = await refreshOnlineUI();
+    ensureBackState('onlineFlow');
     if (!profile) {
       document.getElementById('onlineNameInput').value = '';
       document.getElementById('onlineProfileScreen').style.display = 'flex';
@@ -848,6 +849,12 @@
   };
   function pushBackState(screenId) {
     history.pushState({ psScreen: screenId }, '');
+  }
+  // igual que pushBackState pero sin duplicar: para los sitios que abren hub/setup SIN pasar por
+  // el boton del menu principal (auto-entrada al arrancar con sesion, "Nueva partida" tras jugar)
+  // - sin estado en el historial, el atras del sistema sacaba al usuario de la app
+  function ensureBackState(screenId) {
+    if (!(history.state && history.state.psScreen === screenId)) pushBackState(screenId);
   }
   // si se cierra con el propio boton "Cerrar" (no con el atras del sistema) hay que consumir
   // igualmente el estado que se empujo al abrir - si no, el historial del WebView crece sin
@@ -2540,7 +2547,7 @@
     boardPucks = [];
     resetBtn.style.display = 'none';
     hintEl.style.display = 'none';
-    mainMenuEl.style.display = 'flex';
+    backToMainMenu();
   });
 
   // ---- setup screen ----
@@ -3360,13 +3367,14 @@
       startOnlineSoloMatch();
     } else {
       setupEl.style.display = 'flex';
+      ensureBackState('setup');
       populateKnownPlayerNames();
     }
   });
 
   document.getElementById('resultsMenuBtn').addEventListener('click', () => {
     resultsScreenEl.style.display = 'none';
-    mainMenuEl.style.display = 'flex';
+    backToMainMenu();
     gamePhase = 'setup';
   });
 
