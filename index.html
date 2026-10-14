@@ -4445,11 +4445,12 @@
   const _carMat = new THREE.Matrix4();
   const _partMat = new THREE.Matrix4();
   const _finalMat = new THREE.Matrix4();
-  let carSlotIndex = 0; // 0..139, mismo orden en que se van desbloqueando las plazas
+  // 0..139: orden en que aparecen los coches. ALTERNA entre los dos laterales (izq, der, izq...)
+  // para que ambos parkings se vayan llenando a la vez, en vez de uno entero y el otro vacio
+  const carSlotCountPerSide = [0, 0];
   // un unico bloque compacto de PARKING_ROWS_PER_SIDE x PARKING_SPOTS_PER_ROW en cada lateral
-  // (espejado en X), con un solo asfalto continuo por lado - el orden de aparicion al ir
-  // comprando packs llena primero el lateral izquierdo entero (fila mas cercana al estadio
-  // primero) y luego el derecho, igual que en las versiones anteriores
+  // (espejado en X), con un solo asfalto continuo por lado - los coches se reparten a partes
+  // iguales entre ambos laterales (fila mas cercana al estadio primero dentro de cada uno)
   [-1, 1].forEach(sign => {
     const g = new THREE.Group();
     const asphaltTex = makeAsphaltTexture();
@@ -4468,7 +4469,8 @@
         const x = rowX + (Math.random() - 0.5) * 0.6; // jitter minimo, apenas se nota - los coches deben quedar pegados
         const z = PARKING_CENTER_Z + (col - (PARKING_SPOTS_PER_ROW - 1) / 2) * PARKING_SPOT_SPACING;
         const rotY = sign > 0 ? Math.PI / 2 : -Math.PI / 2; // perpendicular al bloque, "en bateria"
-        const idx = carSlotIndex++;
+        const sideIdx = sign < 0 ? 0 : 1;
+        const idx = carSlotCountPerSide[sideIdx]++ * 2 + sideIdx;
         _carMat.compose(new THREE.Vector3(x, 0, z), _identityQuat.clone().setFromEuler(new THREE.Euler(0, rotY, 0)), _unitScale);
 
         _partMat.compose(new THREE.Vector3(0, 0.55, 0), _identityQuat, _unitScale);
