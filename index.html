@@ -2054,8 +2054,12 @@
     }
     function crowdCheer(level) {
       const c = ctx; if (!c || !enabled) return;
-      const v = Math.max(0, Math.min(1, level || 0));
-      if (v < 0.05) return;
+      // 2026-10-17: antes habia `if (v < 0.05) return;` y con menos del 5 % del aforo (unos 18
+      // espectadores de 350) NO sonaba nada - un estadio pequeno (p.ej. 8 espectadores) nunca
+      // oia la celebracion del SET. Ahora con 1 espectador o mas siempre suena, con un minimo
+      // de 0.12 (flojo y apagado, como un grupito de gente); solo con 0 espectadores no suena.
+      if (!(level > 0)) return;
+      const v = Math.max(0.12, Math.min(1, level));
       getCheerBuffer().then(buffer => {
         if (!buffer || !ctx || !enabled) return;
         const now = ctx.currentTime;
