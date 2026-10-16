@@ -4729,8 +4729,34 @@
   // para que la gente se vea mas realista al verse de cerca.
   const LEG_HEIGHT = 0.85;
   const TORSO_HEIGHT = BODY_HEIGHT - LEG_HEIGHT;
-  const legGeo = new THREE.CylinderGeometry(0.22, 0.26, LEG_HEIGHT, 8);
+  // 2026-10-17: piernas y brazos dejan de ser tubos rectos. Se parte de un cilindro y se le da
+  // un PERFIL (radio por anillo, de arriba abajo): la pierna se afina hacia el tobillo y se
+  // ensancha en la bota; el brazo se afina en la muñeca y abulta en la mano. El numero de
+  // triangulos casi no cambia (6 lados en vez de 8, y se recorta la esfera de la cabeza).
+  function makeProfileCylinder(len, radial, profile) {
+    const n = profile.length - 1;
+    const g = new THREE.CylinderGeometry(1, 1, len, radial, n, false);
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), z = pos.getZ(i);
+      if (Math.abs(x) < 1e-6 && Math.abs(z) < 1e-6) continue; // centros de las tapas
+      const k = Math.max(0, Math.min(n, Math.round((0.5 - pos.getY(i) / len) * n)));
+      pos.setXYZ(i, x * profile[k].r, len * (0.5 - profile[k].t), z * profile[k].r);
+    }
+    g.computeVertexNormals();
+    return g;
+  }
+  const legGeo = makeProfileCylinder(LEG_HEIGHT, 6, [{ t: 0, r: 0.27 }, { t: 0.78, r: 0.19 }, { t: 1, r: 0.27 }]);
   const legMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
+  // color distinto en la punta (bota oscura) segun la altura LOCAL del vertice: sin texturas
+  legMat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying float vLocalY;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLocalY = position.y;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vLocalY;')
+      .replace('#include <color_fragment>', '#include <color_fragment>\n  float shoe = 1.0 - smoothstep(' + (-0.36 * LEG_HEIGHT).toFixed(3) + ', ' + (-0.30 * LEG_HEIGHT).toFixed(3) + ', vLocalY);\n  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.045, 0.035, 0.03), shoe);');
+  };
   const legsMesh = new THREE.InstancedMesh(legGeo, legMat, STADIUM_MAX_PEOPLE * 2);
   legsMesh.castShadow = true;
   legsMesh.frustumCulled = false; // mismo motivo que peopleBodyMesh/peopleHeadMesh
@@ -4740,8 +4766,22 @@
   // Pedido por el usuario el 2026-08-30 ("que no parezca un cilindro") junto con el cambio
   // de cilindro a capsula en el torso - los brazos son lo que mas rompe la silueta de tubo.
   const ARM_LENGTH = TORSO_HEIGHT * 0.8;
-  const armGeo = new THREE.CylinderGeometry(0.16, 0.19, ARM_LENGTH, 8);
+  const armGeo = makeProfileCylinder(ARM_LENGTH, 6, [
+    { t: 0, r: 0.20 }, { t: 0.55, r: 0.15 }, { t: 0.79, r: 0.12 }, { t: 0.87, r: 0.26 }, { t: 1, r: 0.12 },
+  ]);
   const armMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
+  // la MANO: el tramo final del brazo se pinta con el color de piel de la persona (atributo por
+  // instancia aSkin, el mismo color que la cabeza) en vez del color de la manga
+  const armSkinAttr = new THREE.InstancedBufferAttribute(new Float32Array(STADIUM_MAX_PEOPLE * 2 * 3), 3);
+  armGeo.setAttribute('aSkin', armSkinAttr);
+  armMat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute vec3 aSkin;\nvarying vec3 vSkin;\nvarying float vLocalY;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSkin = aSkin; vLocalY = position.y;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vSkin;\nvarying float vLocalY;')
+      .replace('#include <color_fragment>', '#include <color_fragment>\n  float hand = 1.0 - smoothstep(' + (-0.36 * ARM_LENGTH).toFixed(3) + ', ' + (-0.30 * ARM_LENGTH).toFixed(3) + ', vLocalY);\n  diffuseColor.rgb = mix(diffuseColor.rgb, vSkin, hand);');
+  };
   const armsMesh = new THREE.InstancedMesh(armGeo, armMat, STADIUM_MAX_PEOPLE * 2);
   armsMesh.castShadow = true;
   armsMesh.frustumCulled = false;
@@ -4752,9 +4792,29 @@
   // tramo recto central y los dos casquetes redondeados de los extremos, para que la
   // cabeza siga apoyando exactamente donde apoyaba antes.
   const TORSO_RADIUS = 0.62;
-  const bodyGeo = new THREE.CapsuleGeometry(TORSO_RADIUS, Math.max(0.05, TORSO_HEIGHT - TORSO_RADIUS * 2), 4, 12);
-  const headGeo = new THREE.SphereGeometry(HEAD_RADIUS, 14, 10);
+  // 2026-10-17: torso por REVOLUCION de un perfil (cadera, cintura, pecho, hombros, cuello) en vez
+  // de una capsula uniforme: 8 lados x 10 anillos = menos triangulos que la capsula y silueta
+  // mucho mas humana. El perfil esta en alturas relativas a TORSO_HEIGHT (centrado en el origen).
+  const TORSO_PROFILE = [ // [radio relativo a TORSO_RADIUS, altura -0.5..0.5 de TORSO_HEIGHT]
+    [0.00, -0.50], [0.62, -0.49], [0.80, -0.40], [0.78, -0.22], [0.70, -0.02], [0.80, 0.20],
+    [1.00, 0.37], [0.86, 0.44], [0.36, 0.452], [0.30, 0.46], [0.30, 0.50], [0.00, 0.50],
+  ];
+  const bodyGeo = new THREE.LatheGeometry(
+    TORSO_PROFILE.map(([r, y]) => new THREE.Vector2(r * TORSO_RADIUS, y * TORSO_HEIGHT)), 8);
+  const headGeo = new THREE.SphereGeometry(HEAD_RADIUS, 12, 9);
   const bodyMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
+  // cuello: el tramo superior del torso se pinta con el color de piel de la persona (atributo
+  // por instancia aSkin, como las manos)
+  const bodySkinAttr = new THREE.InstancedBufferAttribute(new Float32Array(STADIUM_MAX_PEOPLE * 3), 3);
+  bodyGeo.setAttribute('aSkin', bodySkinAttr);
+  bodyMat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute vec3 aSkin;\nvarying vec3 vSkin;\nvarying float vLocalY;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSkin = aSkin; vLocalY = position.y;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vSkin;\nvarying float vLocalY;')
+      .replace('#include <color_fragment>', '#include <color_fragment>\n  float neck = smoothstep(' + (0.458 * TORSO_HEIGHT).toFixed(3) + ', ' + (0.464 * TORSO_HEIGHT).toFixed(3) + ', vLocalY);\n  diffuseColor.rgb = mix(diffuseColor.rgb, vSkin, neck);');
+  };
   // cara sencilla (2026-09-07, feedback del usuario: "la gente no tiene caras o parece que
   // esta de espaldas") - antes la cabeza era una esfera lisa sin ningun rasgo, asi que
   // SIEMPRE parecia la nuca sin importar hacia donde mirase esa persona. Textura de canvas
@@ -4763,35 +4823,156 @@
   // franja de la esfera que queda "de frente" segun la formula de rotY que ya usan las
   // piernas/brazos (perpendicular a como se separan las piernas, ver placePerson) - asi la
   // cara siempre mira hacia el mismo lado al que mira el resto del cuerpo.
-  function makeFaceTexture() {
-    const w = 128, h = 64;
-    const c = document.createElement('canvas'); c.width = w; c.height = h;
-    const cx = c.getContext('2d');
-    cx.fillStyle = '#ffffff';
-    cx.fillRect(0, 0, w, h);
-    // franja "de frente" centrada en u=0.25 (equator +Z con rotY=0, ver comentario de mas
-    // arriba) - ojos y boca dentro de ese rango horizontal
-    const cxFace = w * 0.25;
-    cx.fillStyle = '#2a2018';
-    [-7, 7].forEach(dx => {
-      cx.beginPath();
-      cx.ellipse(cxFace + dx, h * 0.44, 2.6, 3.2, 0, 0, Math.PI * 2);
-      cx.fill();
+  // 2026-10-17 (mejora del publico, sin tocar la geometria): ATLAS de FACE_VARIANTS caras
+  // distintas apiladas en vertical (cada una de 512x256, el mapeo UV natural de la esfera) en
+  // una sola textura. Cada persona elige una cara con un atributo por instancia (aFace, ver
+  // onBeforeCompile mas abajo): no hay mallas nuevas ni llamadas de dibujo extra, solo un float
+  // por persona. El fondo de cada cara es BLANCO (neutro: el color de piel sigue viniendo del
+  // instanceColor) y los bordes de cada casilla tambien son blancos, asi el mipmapping no
+  // "sangra" una cara sobre la vecina. La variante FACE_CHEER (la ultima) es la cara de
+  // gritar: durante la celebracion de un SET TODOS cambian a ella (uniforme uCheer).
+  const FACE_VARIANTS = 8, FACE_CHEER = 7, FACE_TILE_W = 512, FACE_TILE_H = 256;
+  function makeFaceAtlas() {
+    const c = document.createElement('canvas');
+    c.width = FACE_TILE_W; c.height = FACE_TILE_H * FACE_VARIANTS;
+    const g = c.getContext('2d');
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 0, c.width, c.height);
+    const INK = '#2a2018';
+    // centro de la cara: u=0.25 (equator +Z con rotY=0, ver comentario de mas arriba)
+    const fx = FACE_TILE_W * 0.25, eyeY = FACE_TILE_H * 0.46, mouthY = FACE_TILE_H * 0.64;
+    function eyes(oy, kind) {
+      [-30, 30].forEach(dx => {
+        g.fillStyle = INK; g.strokeStyle = INK; g.lineWidth = 5; g.lineCap = 'round';
+        if (kind === 'closed') {            // ojos felices ^ ^
+          g.beginPath(); g.arc(fx + dx, eyeY + oy + 4, 9, Math.PI * 1.1, Math.PI * 1.9); g.stroke();
+        } else {
+          g.beginPath(); g.ellipse(fx + dx, eyeY + oy, 6, 8, 0, 0, Math.PI * 2); g.fill();
+        }
+      });
+    }
+    function brows(oy, tilt) {
+      g.strokeStyle = '#4a3322'; g.lineWidth = 5; g.lineCap = 'round';
+      [-1, 1].forEach(sd => {
+        g.beginPath();
+        g.moveTo(fx + sd * 40, eyeY + oy - 12 + tilt * sd * -1);
+        g.lineTo(fx + sd * 18, eyeY + oy - 15 + tilt * sd);
+        g.stroke();
+      });
+    }
+    function nose() {
+      g.fillStyle = 'rgba(120,70,40,0.28)';
+      g.beginPath(); g.ellipse(fx, FACE_TILE_H * 0.55, 7, 5, 0, 0, Math.PI * 2); g.fill();
+    }
+    function cheeks() {
+      g.fillStyle = 'rgba(235,110,110,0.30)';
+      [-52, 52].forEach(dx => { g.beginPath(); g.ellipse(fx + dx, FACE_TILE_H * 0.58, 15, 9, 0, 0, Math.PI * 2); g.fill(); });
+    }
+    function smile(w, depth) {
+      g.strokeStyle = INK; g.lineWidth = 5; g.lineCap = 'round';
+      g.beginPath(); g.ellipse(fx, mouthY - depth * 0.4, w, depth, 0, 0.12 * Math.PI, 0.88 * Math.PI); g.stroke();
+    }
+    function ears() {
+      const ey = FACE_TILE_H * 0.54;
+      [0, FACE_TILE_W * 0.5, FACE_TILE_W].forEach(ex => {
+        g.fillStyle = 'rgba(70,35,20,0.22)';
+        g.beginPath(); g.ellipse(ex, ey, 20, 34, 0, 0, Math.PI * 2); g.fill();
+        g.strokeStyle = 'rgba(70,35,20,0.38)'; g.lineWidth = 4;
+        g.beginPath(); g.ellipse(ex + (ex === FACE_TILE_W * 0.5 ? -3 : 3), ey, 11, 22, 0, 0, Math.PI * 2); g.stroke();
+      });
+    }
+    const variants = [
+      () => { eyes(0); brows(0, 0); nose(); cheeks(); smile(22, 12); },                          // 0 sonrisa
+      () => {                                                                                       // 1 sonrisa grande con dientes
+        eyes(0); brows(0, -2); nose(); cheeks();
+        g.fillStyle = INK; g.beginPath(); g.ellipse(fx, mouthY - 2, 26, 18, 0, 0, Math.PI); g.fill();
+        g.fillStyle = '#ffffff'; g.fillRect(fx - 20, mouthY - 2, 40, 7);
+      },
+      () => { eyes(0); brows(0, 2); nose(); g.strokeStyle = INK; g.lineWidth = 5; g.lineCap = 'round';  // 2 serio
+        g.beginPath(); g.moveTo(fx - 14, mouthY + 4); g.lineTo(fx + 14, mouthY + 4); g.stroke(); },
+      () => {                                                                                       // 3 gafas redondas
+        nose(); cheeks(); smile(20, 10);
+        g.strokeStyle = '#1c1c1c'; g.lineWidth = 5;
+        [-30, 30].forEach(dx => { g.beginPath(); g.arc(fx + dx, eyeY, 17, 0, Math.PI * 2); g.stroke(); });
+        g.beginPath(); g.moveTo(fx - 13, eyeY); g.lineTo(fx + 13, eyeY); g.stroke();
+        eyes(0);
+      },
+      () => {                                                                                       // 4 bigote
+        eyes(0); brows(0, 0); nose(); smile(18, 9);
+        g.fillStyle = '#3a2a1a';
+        [-1, 1].forEach(sd => { g.beginPath(); g.ellipse(fx + sd * 15, FACE_TILE_H * 0.595, 17, 7, sd * 0.25, 0, Math.PI * 2); g.fill(); });
+      },
+      () => {                                                                                       // 5 barba
+        g.fillStyle = 'rgba(60,40,25,0.55)';
+        g.beginPath(); g.ellipse(fx, FACE_TILE_H * 0.73, 62, 30, 0, 0, Math.PI * 2); g.fill();
+        eyes(0); brows(0, 1); nose();
+        g.strokeStyle = '#f3e2c0'; g.lineWidth = 5; g.lineCap = 'round';
+        g.beginPath(); g.moveTo(fx - 14, mouthY + 1); g.lineTo(fx + 14, mouthY + 1); g.stroke();
+      },
+      () => {                                                                                       // 6 gafas de sol + sonrisa
+        nose(); smile(20, 9);
+        g.fillStyle = '#111111';
+        g.fillRect(fx - 54, eyeY - 14, 46, 26); g.fillRect(fx + 8, eyeY - 14, 46, 26); g.fillRect(fx - 10, eyeY - 8, 20, 6);
+      },
+      () => {                                                                                       // 7 GRITANDO (ojos ^ ^, boca abierta)
+        eyes(0, 'closed'); brows(-3, -3); nose(); cheeks();
+        g.fillStyle = INK; g.beginPath(); g.ellipse(fx, mouthY + 2, 18, 22, 0, 0, Math.PI * 2); g.fill();
+        g.fillStyle = '#c4504a'; g.beginPath(); g.ellipse(fx, mouthY + 14, 11, 8, 0, 0, Math.PI * 2); g.fill();
+      },
+    ];
+    variants.forEach((draw, i) => {
+      g.save();
+      // la casilla i ocupa v en [i/N, (i+1)/N]; con flipY el canvas se lee de arriba abajo
+      g.translate(0, (FACE_VARIANTS - 1 - i) * FACE_TILE_H);
+      g.beginPath(); g.rect(0, 0, FACE_TILE_W, FACE_TILE_H); g.clip();
+      draw();
+      ears();
+      g.restore();
     });
-    cx.beginPath();
-    cx.ellipse(cxFace, h * 0.62, 5, 2.2, 0, 0, Math.PI);
-    cx.fill();
-    return new THREE.CanvasTexture(c);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 2; // suficiente para caras pequenas; mas seria coste de relleno en moviles flojos
+    return tex;
   }
-  const headMat = new THREE.MeshStandardMaterial({ roughness: 0.85, map: makeFaceTexture() });
+  const headMat = new THREE.MeshStandardMaterial({ roughness: 0.85, map: makeFaceAtlas() });
+  // cara de cada persona (0..FACE_VARIANTS-2) como atributo de instancia; uCheer=1 -> todos
+  // ponen la cara de gritar (FACE_CHEER). Se desplaza la coordenada V del mapa en el vertex shader.
+  const faceIdxAttr = new THREE.InstancedBufferAttribute(new Float32Array(STADIUM_MAX_PEOPLE), 1);
+  headGeo.setAttribute('aFace', faceIdxAttr);
+  const headCheerUniform = { value: 0 };
+  headMat.onBeforeCompile = (shader) => {
+    shader.uniforms.uCheer = headCheerUniform;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aFace;\nuniform float uCheer;')
+      .replace('#include <uv_vertex>',
+        '#include <uv_vertex>\n#ifdef USE_MAP\n  vMapUv.y = (vMapUv.y + floor(mix(aFace, ' + FACE_CHEER.toFixed(1) + ', uCheer) + 0.5)) / ' + FACE_VARIANTS.toFixed(1) + ';\n#endif');
+  };
   // pelo (2026-09-07, feedback del usuario: "las cabezas parecen bolas de billar, ¿pueden
   // tener forma humana de verdad y con pelo?") - un "gorro" barato en vez de mechones reales:
   // un casquete esferico un pelin mas grande que la cabeza, cubriendo desde arriba hasta un
   // poco mas abajo del ecuador (asi tapa tambien las orejas/sienes, no solo la coronilla) -
   // mismo patron que piernas/brazos, un InstancedMesh mas, color por persona via instanceColor.
   const HAIR_COLORS = [0x2b1a10, 0x1a1410, 0x5c3a1e, 0x8a6a3a, 0xd8c088, 0x3a3a3a, 0x9c1f1f];
-  const hairGeo = new THREE.SphereGeometry(HEAD_RADIUS * 1.08, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.62);
+  // 2026-10-17: el casquete bajaba hasta 0.62*PI (unos 20 grados por DEBAJO del ecuador) y TAPABA los
+  // ojos de la textura de la cara (estan hacia los 83 grados desde la coronilla) - por eso las caras casi
+  // no se veian. Acortado a 0.40*PI: queda como un flequillo/gorro que deja ojos y boca al aire.
+  const hairGeo = new THREE.SphereGeometry(HEAD_RADIUS * 1.08, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.40);
   const hairMat = new THREE.MeshStandardMaterial({ roughness: 0.95 });
+  // el borde del casquete era un circulo perfecto = efecto "gorro". Se rompe en MECHONES
+  // descartando fragmentos justo por encima del borde con un patron de senos segun el angulo
+  // (coste minimo: sin texturas, sin transparencia) y se oscurece hacia el borde (volumen).
+  const HAIR_RIM_Y = HEAD_RADIUS * 1.08 * Math.cos(Math.PI * 0.40);
+  hairMat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vLocalPos;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLocalPos = position;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vLocalPos;')
+      .replace('#include <clipping_planes_fragment>',
+        '#include <clipping_planes_fragment>\n  float hAng = atan(vLocalPos.z, vLocalPos.x);\n  float hStrand = 0.5 + 0.5 * (0.6 * sin(hAng * 17.0) + 0.4 * sin(hAng * 7.0 + 1.3));\n  if (vLocalPos.y < ' + HAIR_RIM_Y.toFixed(3) + ' + 0.085 * hStrand) discard;')
+      .replace('#include <color_fragment>',
+        '#include <color_fragment>\n  diffuseColor.rgb *= 0.74 + 0.26 * smoothstep(' + HAIR_RIM_Y.toFixed(3) + ', ' + (HAIR_RIM_Y + 0.36).toFixed(3) + ', vLocalPos.y);');
+  };
   const hairMesh = new THREE.InstancedMesh(hairGeo, hairMat, STADIUM_MAX_PEOPLE);
   hairMesh.castShadow = true;
   hairMesh.frustumCulled = false; // mismo motivo que peopleBodyMesh/peopleHeadMesh
@@ -4878,12 +5059,49 @@
   // segundos. Se guarda la posicion base de cada persona (crowdBaseX/Y/Z/RotY/Phase, ver
   // updateStadiumVisual) para poder desplazarla hacia arriba con un rebote y luego devolverla
   // a su sitio, sin tener que reconstruir toda la grada.
+  // 2026-10-17: peinados y forma de cabeza SIN geometria nueva. Antes todas las cabezas eran
+  // esferas perfectas con el mismo casquete pegado encima (parecia un gorro de lana sin pompon).
+  // Ahora la cabeza se escala a ovalo (mas alta que ancha) y el MISMO casquete de pelo se
+  // reutiliza con una escala, una inclinacion (tilt: sube la linea del flequillo delante y baja
+  // la nuca detras), un giro lateral (roll: raya al lado) y un desplazamiento distintos por
+  // peinado. Un peinado con escala <1 queda dentro de la cabeza = calvo.
+  const HEAD_SCALE = [0.80, 0.95, 0.85];
+  const HAIR_STYLES = [
+    { w: 3, s: [1.00, 1.00, 1.04], tilt: -0.40, roll: 0.00, dy: 0.00, dz: -0.04 }, // corto, nuca cubierta
+    { w: 2, s: [1.12, 1.22, 1.12], tilt: -0.25, roll: 0.00, dy: 0.05, dz: -0.06 }, // voluminoso / rizado
+    { w: 2, s: [1.00, 1.22, 1.05], tilt: -0.10, roll: 0.00, dy: 0.05, dz: 0.06 },   // tupe
+    { w: 2, s: [1.05, 1.16, 1.10], tilt: -0.70, roll: 0.00, dy: -0.04, dz: -0.10 }, // melena larga
+    { w: 2, s: [1.00, 1.02, 1.04], tilt: -0.35, roll: 0.32, dy: 0.00, dz: -0.02 }, // raya al lado
+    { w: 1, s: [0.80, 0.80, 0.80], tilt: 0.00, roll: 0.00, dy: 0.00, dz: 0.00 },   // calvo
+  ];
+  const HAIR_STYLE_BAG = [];
+  HAIR_STYLES.forEach((st, i) => { for (let k = 0; k < st.w; k++) HAIR_STYLE_BAG.push(i); });
+  const crowdStyle = []; // peinado de cada persona (indice en HAIR_STYLES)
+  const _headObj = new THREE.Object3D(), _hairObj = new THREE.Object3D();
+  // coloca cabeza + pelo de la persona i con el centro de la cabeza en (x, y, z) mirando a rotY
+  function setHeadAndHair(i, x, y, z, rotY) {
+    const st = HAIR_STYLES[crowdStyle[i]];
+    _headObj.position.set(x, y - HEAD_RADIUS * 0.04, z);
+    // inclinacion leve y fija por persona (hash del indice): nadie mira rigido como un maniqui
+    const nod = (Math.sin(i * 12.9898) * 43758.5453 % 1) * 0.13, lean = (Math.sin(i * 78.233) * 12543.123 % 1) * 0.10;
+    _headObj.rotation.set(nod, rotY, lean, 'YXZ');
+    _headObj.scale.set(HEAD_SCALE[0], HEAD_SCALE[1], HEAD_SCALE[2]);
+    _headObj.updateMatrix();
+    peopleHeadMesh.setMatrixAt(i, _headObj.matrix);
+    // desplazamiento del pelo en el sistema local de la persona (dz = hacia donde mira)
+    const sinR = Math.sin(rotY), cosR = Math.cos(rotY);
+    _hairObj.position.set(x + sinR * st.dz * HEAD_RADIUS, y + st.dy * HEAD_RADIUS - HEAD_RADIUS * 0.04, z + cosR * st.dz * HEAD_RADIUS);
+    _hairObj.rotation.set(st.tilt + nod, rotY, st.roll + lean, 'YXZ');
+    _hairObj.scale.set(st.s[0] * HEAD_SCALE[0], st.s[1] * HEAD_SCALE[1], st.s[2] * HEAD_SCALE[2]);
+    _hairObj.updateMatrix();
+    hairMesh.setMatrixAt(i, _hairObj.matrix);
+  }
   let crowdCount = 0;
   const crowdBaseX = [], crowdBaseY = [], crowdBaseZ = [], crowdRotY = [], crowdPhase = [];
   let crowdCelebrationT = null;
   const CROWD_CELEBRATION_DURATION = 5; // igual que dura el audio de celebracion (audio/crowd-cheer.mp3)
   function triggerCrowdCelebration() {
-    if (crowdCount > 0) crowdCelebrationT = 0;
+    if (crowdCount > 0) { crowdCelebrationT = 0; headCheerUniform.value = 1; } // todos ponen cara de gritar
   }
   function updateCrowdCelebration(dt) {
     if (crowdCelebrationT === null) return;
@@ -4913,11 +5131,7 @@
       dummyBody.updateMatrix();
       peopleBodyMesh.setMatrixAt(i, dummyBody.matrix);
 
-      dummyHead.position.set(x, rowHeight + BODY_HEIGHT + HEAD_RADIUS + jump, z);
-      dummyHead.rotation.set(0, rotY, 0);
-      dummyHead.updateMatrix();
-      peopleHeadMesh.setMatrixAt(i, dummyHead.matrix);
-      hairMesh.setMatrixAt(i, dummyHead.matrix); // mismo sitio que la cabeza, ver placePerson
+      setHeadAndHair(i, x, rowHeight + BODY_HEIGHT + HEAD_RADIUS + jump, z, rotY);
 
       // piernas: saltan con el mismo desplazamiento que el resto del cuerpo, calculando su
       // separacion lateral a partir de rotY (ya guardado por persona) sin necesitar arrays nuevos
@@ -4945,7 +5159,7 @@
     legsMesh.instanceMatrix.needsUpdate = true;
     armsMesh.instanceMatrix.needsUpdate = true;
     hairMesh.instanceMatrix.needsUpdate = true;
-    if (finished) crowdCelebrationT = null;
+    if (finished) { crowdCelebrationT = null; headCheerUniform.value = 0; }
   }
 
   function updateStadiumVisual(seatsBuilt, materialTier, renovatedSeats, occupancyFraction, playerName, countryCode, parkingSpotsBuilt, cafeteriaTier) {
@@ -5190,13 +5404,18 @@
     flagMat.needsUpdate = true;
     let instanceIdx = 0;
     let flagIdx = 0;
-    crowdBaseX.length = crowdBaseY.length = crowdBaseZ.length = crowdRotY.length = crowdPhase.length = 0;
+    crowdBaseX.length = crowdBaseY.length = crowdBaseZ.length = crowdRotY.length = crowdPhase.length = crowdStyle.length = 0;
 
     // coloca una persona (cuerpo+piernas+brazos+cabeza+bandera ocasional) en (x, rowHeight, z)
     // y avanza instanceIdx/flagIdx - factorizado el 2026-09-05 para poder reutilizarlo tanto
     // en las 2 gradas laterales como en la grada del fondo sin duplicar todo este bloque
     function placePerson(x, z, rowHeight, flagOffsetX) {
-      const rotY = Math.random() * Math.PI * 2;
+      // 2026-10-17: la gente MIRA A LA PISTA (antes rotY era totalmente aleatorio y la mayoria
+      // quedaba de espaldas o de lado). La cara sale en +Z con rotY=0, asi que la direccion de
+      // mirada es (sin rotY, cos rotY); apuntamos al centro de la pista y anadimos una
+      // desviacion aleatoria pequena para que no parezcan soldados formados. Piernas y brazos
+      // usan el mismo rotY, asi el cuerpo queda coherente con la cara.
+      const rotY = Math.atan2(0 - x, -BOARD.length * 0.5 - z) + (Math.random() - 0.5) * 0.7;
 
       dummyBody.position.set(x, rowHeight + LEG_HEIGHT + TORSO_HEIGHT / 2, z);
       dummyBody.rotation.set(0, rotY, 0);
@@ -5234,13 +5453,13 @@
       armsMesh.setMatrixAt(instanceIdx * 2 + 1, dummyArm.matrix);
       armsMesh.setColorAt(instanceIdx * 2 + 1, clothes);
 
-      dummyHead.position.set(x, rowHeight + BODY_HEIGHT + HEAD_RADIUS, z);
-      dummyHead.rotation.set(0, rotY, 0);
-      dummyHead.updateMatrix();
-      peopleHeadMesh.setMatrixAt(instanceIdx, dummyHead.matrix);
+      crowdStyle[instanceIdx] = HAIR_STYLE_BAG[Math.floor(Math.random() * HAIR_STYLE_BAG.length)];
+      setHeadAndHair(instanceIdx, x, rowHeight + BODY_HEIGHT + HEAD_RADIUS, z, rotY);
       skin.setHex(SKIN_COLORS[Math.floor(Math.random() * SKIN_COLORS.length)]);
       peopleHeadMesh.setColorAt(instanceIdx, skin);
-      hairMesh.setMatrixAt(instanceIdx, dummyHead.matrix); // mismo sitio/rotacion que la cabeza
+      for (let k = 0; k < 2; k++) armSkinAttr.setXYZ(instanceIdx * 2 + k, skin.r, skin.g, skin.b); // mano = color de piel
+      bodySkinAttr.setXYZ(instanceIdx, skin.r, skin.g, skin.b); // cuello = color de piel
+      faceIdxAttr.array[instanceIdx] = Math.floor(Math.random() * FACE_CHEER); // cara propia (0..FACE_CHEER-1)
       hair.setHex(HAIR_COLORS[Math.floor(Math.random() * HAIR_COLORS.length)]);
       hairMesh.setColorAt(instanceIdx, hair);
 
@@ -5437,11 +5656,14 @@
     hairMesh.instanceMatrix.needsUpdate = true;
     if (peopleBodyMesh.instanceColor) peopleBodyMesh.instanceColor.needsUpdate = true;
     if (peopleHeadMesh.instanceColor) peopleHeadMesh.instanceColor.needsUpdate = true;
+    faceIdxAttr.needsUpdate = true;
     if (hairMesh.instanceColor) hairMesh.instanceColor.needsUpdate = true;
     legsMesh.count = instanceIdx * 2;
     legsMesh.instanceMatrix.needsUpdate = true;
     if (legsMesh.instanceColor) legsMesh.instanceColor.needsUpdate = true;
     armsMesh.count = instanceIdx * 2;
+    armSkinAttr.needsUpdate = true;
+    bodySkinAttr.needsUpdate = true;
     armsMesh.instanceMatrix.needsUpdate = true;
     if (armsMesh.instanceColor) armsMesh.instanceColor.needsUpdate = true;
     flagMesh.count = flagIdx;
